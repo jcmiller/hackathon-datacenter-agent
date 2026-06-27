@@ -1,14 +1,12 @@
 # EvoSentinel DC Hackathon Plan & Notes
 
-... (Iteration 1 & 2 logged)
+... (previous iterations logged)
 
-**Current Status (after Iteration 2)**: classifier.py implemented and testable. main_loop.py skeleton added in Iteration 3.
+**Current Status (after Iteration 3)**: main_loop.py + enhanced simulator with realistic DCGM GPU metrics (temp, util, power, ECC, clock, env modes).
 
 ## Iteration Log
-- Iteration 1 (done): Multi-stage docs.
-- Iteration 2 (done): classifier.py + PLAN update.
-- **Iteration 3 (in progress)**: main_loop.py orchestration skeleton integrating sim + classifier. Next: Analyzer integration.
-- Iteration 4: Self-improver.
-- Iteration 5: Polish & submit.
+- Iteration 1-3 (done): Architecture, classifier, main_loop, enhanced sim.
+- **Iteration 4 (in progress)**: Enhanced simulator + AGENTS.md for multi-stage personas. Next: Self-improver implementation.
+- Iteration 5: Full integration, polish, submit.
 
 ...
