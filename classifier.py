@@ -4,7 +4,7 @@ from google import genai
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-CLASSIFIER_MODEL = "gemini-1.5-flash"  # Small/fast model for low-latency classification
+CLASSIFIER_MODEL = "gemini-2.5-flash"  # Small/fast model for low-latency classification
 
 CLASSIFIER_PROMPT = """
 You are a fast failure classifier for data center GPU telemetry (DCGM-style metrics).
@@ -14,13 +14,13 @@ Telemetry batch (JSON):
 
 Classify if there is a failure and its primary type.
 Output ONLY valid JSON:
-{
+{{
   "failure": boolean,
   "type": "normal | overheating | voltage_instability | ecc_error | power_quality | dust_proxy | humidity | combined | other",
   "confidence": float (0-1),
   "reason": "short explanation",
   "suggested_next": "brief recommendation for analyzer"
-}
+}}
 """
 
 def classify_telemetry(telemetry: dict) -> dict:
@@ -29,7 +29,7 @@ def classify_telemetry(telemetry: dict) -> dict:
     response = client.models.generate_content(
         model=CLASSIFIER_MODEL,
         contents=prompt,
-        generation_config={"temperature": 0.1, "response_mime_type": "application/json"}
+        config={"temperature": 0.1, "response_mime_type": "application/json"}
     )
     try:
         return json.loads(response.text)

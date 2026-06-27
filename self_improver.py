@@ -27,7 +27,7 @@ def reflect_and_improve(incident_trace: dict) -> dict:
     prompt = IMPROVER_PROMPT.format(trace=json.dumps(incident_trace, indent=2))
     # In full impl: Use Antigravity interaction with env_id for file edits
     response = client.models.generate_content(
-        model="gemini-1.5-pro",  # Stronger for reflection
+        model="gemini-2.5-pro",  # Stronger for reflection
         contents=prompt
     )
     # Placeholder: parse and return improvements
