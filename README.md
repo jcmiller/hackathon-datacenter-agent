@@ -6,6 +6,12 @@
 
 Built with Gemini 3.5 / Antigravity for the **Self-Improvement Stack** theme. Leverages DCGM-inspired GPU telemetry.
 
+## Recent Improvements
+- Enhanced simulator with richer DCGM metrics (memory, NVLink proxy, fan effort, throttling reasons, trend buffering).
+- Stronger self-improver with persistent edit skeletons and validation replay.
+- Monitoring loop with history buffering for better trend detection.
+- Expanded documentation with partner leverage plan.
+
 ## Multi-Stage Architecture
 1. **Monitoring Loop** - Continuous telemetry ingestion.
 2. **Classifier** (small Gemini) - Fast failure detection & typing.
@@ -27,10 +33,21 @@ See ARCHITECTURE.md for detailed flow and diagrams.
 - self_improver.py: Reflection skeleton.
 - ARCHITECTURE.md, PLAN.md, SKILL.md, AGENTS.md.
 
-Public repo for submission. Strong foundation after 5 iterations of refinement.
+## Leveraging Hackathon Partner Resources
+- **Modular (MAX + Mojo)**: Use MAX guides and Modular Agent Skills for optimized simulator components or Mojo-based metric processing/remediation. Great for heterogeneous compute performance.
+- **Antigravity (Google DeepMind)**: Core for persistent self-edits via env_id sandbox.
+- **Gemini/Gemma**: Enhance classifier with Gemma (local), Gemini Live for voice alerts.
+- **LiveKit**: Add voice/video interfaces for ops alerts/commands.
+- **Digital Ocean**: $200 credits for hosting/scaling demo deployment.
+- **MongoDB Atlas**: Persistent storage for telemetry history and improvement logs.
+- **MiniMax**: Multimodal extensions (e.g., vision for physical monitoring).
+
+See PLAN.md for integration priorities.
 
 ## Demo Highlights for Judges
-- Live multi-stage pipeline.
+- Live multi-stage pipeline with realistic failures.
 - Visible self-improvement (before/after on novel GPU failures).
-- Realistic DCGM telemetry.
+- Partner integrations roadmap.
 - High technicality + originality in critical infrastructure domain.
+
+Public repo for submission. Strong foundation after improvements.
