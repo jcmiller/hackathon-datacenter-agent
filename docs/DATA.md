@@ -21,6 +21,7 @@ hack/
 └── data/                  # gitignored
     ├── pai/               # Alibaba PAI 2020  (full CSVs + .header sidecars)
     ├── acme/              # Acme LLM trace    (git repo: InternLM/AcmeTrace)
+    ├── acme-util/         # Acme FULL ~80 GB raw util (opt-in; HuggingFace)
     ├── philly/            # Philly 2017       (repo only; data blob blocked)
     └── clusterdata/       # alibaba/clusterdata (newer traces v2023/25/26)
 ```
@@ -29,18 +30,38 @@ hack/
 
 ## What gets downloaded
 
-| Target  | Source | On-disk | Workload | Pulled by default |
-|---------|--------|--------:|----------|:-----------------:|
-| `pai`   | Aliyun OSS (`v2020GPUTraces`) | ~3.9 GB | Mixed DL train + inference, **fractional GPU sharing** | ✅ |
-| `acme`  | GitHub `InternLM/AcmeTrace` | ~116 MB | **LLM development** (pretrain / eval / debug) | ✅ |
-| `philly`| GitHub `msr-fiddle/philly-traces` | ~2 MB (repo only) | DNN training, 2017 | ❌ (`all`) |
-| `extra` | GitHub `alibaba/clusterdata` | ~3.7 GB | K8s GPU-share, DLRM, GenAI serving | ❌ (`all`) |
+| Target      | Source | On-disk | Workload | In default / `all` |
+|-------------|--------|--------:|----------|:------------------:|
+| `pai`       | Aliyun OSS (`v2020GPUTraces`) | ~3.9 GB | Mixed DL train + inference, **fractional GPU sharing** | default |
+| `acme`      | GitHub `InternLM/AcmeTrace` | ~116 MB | **LLM development** — job traces + processed util pkls | default |
+| `philly`    | GitHub `msr-fiddle/philly-traces` | ~2 MB (repo only) | DNN training, 2017 | `all` |
+| `extra`     | GitHub `alibaba/clusterdata` | ~3.7 GB | K8s GPU-share, DLRM, GenAI serving (tarballs auto-extracted) | `all` |
+| `acme-util` | HuggingFace `Qinghao/AcmeTrace` | **~80 GB** | Acme FULL — raw DCGM/Prometheus/IPMI utilization + power | `everything` only |
+
+`all` = pai + acme + philly + extra. `everything` = `all` + acme-util.
+`acme-util` requires **git-lfs**; everything else needs only `curl` + `git`.
 
 > **Philly is best-effort.** Its 1.1 GB `trace-data.tar.gz` sits behind GitHub
 > LFS whose budget is exhausted (HTTP 403) — only Microsoft can restore it. The
 > script clones the repo (README + analysis notebook) and *attempts* `git lfs
 > pull`, then reports the failure without aborting. **Use `pai` as the closest
 > structural analog.**
+
+### Running on a remote analysis box
+
+The script self-resolves paths and uses only HTTPS sources (no SSH keys), so a
+clean run reproduces the full set:
+
+```bash
+git clone <this-repo> && cd hack
+scripts/download_datasets.sh all          # pai + acme + philly + extra (~7.5 GB)
+scripts/download_datasets.sh everything   # + acme-util ~80 GB (needs git-lfs + disk)
+DATA_DIR=/mnt/data scripts/download_datasets.sh everything   # custom data root
+```
+
+It is idempotent (re-runs skip what's present) and verifies PAI checksums, so it
+is safe to re-run after an interrupted transfer. The only data it cannot fetch is
+the Philly blob (server-side LFS block).
 
 ---
 
@@ -91,10 +112,14 @@ failure-pattern and resilience modeling.
 Columns (headers present): `job_id, user, node_num, gpu_num, cpu_num, type,
 state, submit_time, start_time, end_time, duration, queue, gpu_time`.
 **Timestamps are wall-clock ISO** (`2023-03-01 00:18:22+08:00`).
-`state` ∈ {COMPLETED, FAILED, CANCELLED, …} — the failure label.
+`state` ∈ {COMPLETED, FAILED, PREEMPTED, CANCELLED, NODE_FAIL, TIMEOUT} — a
+richer failure taxonomy than PAI's single `Failed` bucket; `NODE_FAIL` is the
+hardware-failure signal closest to EvoSentinel's target.
 
-> The raw ~80 GB utilization/power data is **not** pulled here; it lives on
-> HuggingFace `Qinghao/AcmeTrace`. Only the processed pickles in-repo are local.
+> The `acme` target pulls only job traces + processed pickles. The raw ~80 GB
+> DCGM/Prometheus/IPMI utilization + power data lives on HuggingFace
+> `Qinghao/AcmeTrace`; fetch it with the **`acme-util`** target (needs git-lfs)
+> into `data/acme-util/`.
 
 ## 3. Philly — `data/philly/` (reference only)
 
@@ -110,7 +135,7 @@ committed directly in-repo:
 
 - `cluster-trace-gpu-v2023/` — Kubernetes GPU-**sharing** scheduling (pod/node lists, `gpu_milli`, QoS)
 - `cluster-trace-gpu-v2025/` — disaggregated **DLRM** serving (role-split, RDMA req/limit)
-- `cluster-trace-v2026-GenAI/` — **Stable Diffusion serving** trace (app latency / queue / GPU duty-cycle; LoRA + ControlNet)
+- `cluster-trace-v2026-GenAI/` — **Stable Diffusion serving** trace (app latency / queue / GPU duty-cycle; LoRA + ControlNet). Ships as 14 `.tar.gz`; the downloader auto-extracts them to CSV.
 - `cluster-trace-gpu-v2026/` — scripts only
 
 > The repo's own `cluster-trace-gpu-v2020/data/` holds only the download script

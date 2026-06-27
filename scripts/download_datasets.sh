@@ -9,22 +9,28 @@
 # Usage (run from the hack/ project root, or anywhere — paths self-resolve):
 #   scripts/download_datasets.sh                 # default set: pai + acme
 #   scripts/download_datasets.sh all             # pai + acme + philly + extra
+#   scripts/download_datasets.sh everything      # all + acme-util (~80 GB!)
 #   scripts/download_datasets.sh pai acme        # named subset
 #   scripts/download_datasets.sh --list          # show datasets and exit
 #   DATA_DIR=/some/path scripts/download_datasets.sh pai
 #
-# Data lands in hack/data/ (gitignored) as: data/{pai,acme,philly,clusterdata}/
+# Data lands in hack/data/ (gitignored) as data/{pai,acme,philly,clusterdata}/
+# and data/acme-util/ for the heavy Acme utilization set.
+#
+# Requirements: curl, git. acme-util additionally needs git-lfs.
 #
 # Datasets:
-#   pai     Alibaba PAI 2020 GPU trace (~3.9 GB extracted). 7 CSV tables incl.
-#           per-worker GPU/CPU/mem utilization sensors. Fractional GPU sharing.
-#   acme    Acme LLM-datacenter trace (NSDI'24). Job traces w/ failure states;
-#           raw 80 GB utilization stays on HuggingFace (not pulled here).
-#   philly  Microsoft Philly DNN trace (2017). BEST-EFFORT ONLY — the 1.1 GB data
-#           blob is behind GitHub LFS whose budget is exhausted (HTTP 403). The
-#           repo (README + analysis notebook) is fetched; the data may fail.
-#   extra   Newer Alibaba traces (v2023 K8s GPU-sharing, v2025 DLRM,
-#           v2026-GenAI serving) — committed in-repo, pulled via shallow clone.
+#   pai       Alibaba PAI 2020 GPU trace (~3.9 GB extracted). 7 CSV tables incl.
+#             per-worker GPU/CPU/mem utilization sensors. Fractional GPU sharing.
+#   acme      Acme LLM-datacenter trace (NSDI'24). Job traces w/ failure states
+#             (COMPLETED/FAILED/PREEMPTED/NODE_FAIL/TIMEOUT) + processed util pkls.
+#   philly    Microsoft Philly DNN trace (2017). BEST-EFFORT ONLY — the 1.1 GB
+#             data blob is behind GitHub LFS whose budget is exhausted (HTTP 403).
+#             The repo (README + analysis notebook) is fetched; the data may fail.
+#   extra     Newer Alibaba traces (v2023 K8s GPU-sharing, v2025 DLRM,
+#             v2026-GenAI serving) — committed in-repo; clone + extract tarballs.
+#   acme-util Acme FULL dataset incl. ~80 GB raw DCGM/Prometheus/IPMI utilization
+#             from HuggingFace (Qinghao/AcmeTrace). Opt-in; needs git-lfs + disk.
 
 set -euo pipefail
 
@@ -33,6 +39,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"   # project root (scripts/ lives one le
 DATA_DIR="${DATA_DIR:-$ROOT_DIR/data}"
 PAI_OSS="https://aliopentrace.oss-cn-beijing.aliyuncs.com/v2020GPUTraces"
 ACME_REPO="https://github.com/InternLM/AcmeTrace.git"
+ACME_HF_REPO="https://huggingface.co/datasets/Qinghao/AcmeTrace"
 PHILLY_REPO="https://github.com/msr-fiddle/philly-traces.git"
 CLUSTERDATA_REPO="https://github.com/alibaba/clusterdata.git"
 
@@ -133,18 +140,51 @@ fetch_philly() {
   fi
 }
 
+# Extract the v2026-GenAI tarballs (committed compressed in the repo).
+# Idempotent: skips a tarball whose first archived entry already exists.
+extract_genai() {
+  local d="$DATA_DIR/clusterdata/cluster-trace-v2026-GenAI"
+  [ -d "$d" ] || return 0
+  local f first
+  for f in "$d"/*.tar.gz; do
+    [ -f "$f" ] || continue
+    first="$(tar -tzf "$f" 2>/dev/null | head -1)"
+    if [ -n "$first" ] && [ -e "$d/$first" ]; then continue; fi
+    log "  extracting $(basename "$f")"
+    tar -xzf "$f" -C "$d"
+  done
+}
+
 fetch_extra() {
   local dest="$DATA_DIR/clusterdata"
   if [ -d "$dest/.git" ]; then
     log "clusterdata present, pulling latest"
     git -C "$dest" pull --ff-only || warn "clusterdata pull failed (continuing)"
-    return
+  else
+    log "Extra Alibaba traces -> $dest (shallow clone of full clusterdata repo)"
+    GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 "$CLUSTERDATA_REPO" "$dest"
   fi
-  log "Extra Alibaba traces -> $dest (shallow clone of full clusterdata repo)"
-  GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 "$CLUSTERDATA_REPO" "$dest"
+  extract_genai
   log "Extra done. v2023 (K8s GPU-share), v2025 (DLRM), v2026-GenAI (serving)."
   log "  Note: cluster-trace-gpu-v2020/data/ here only has the download script;"
   log "  the full v2020 data lives under the 'pai' dataset of this script."
+}
+
+# Acme FULL dataset incl. the ~80 GB raw utilization, cloned from HuggingFace.
+# HuggingFace serves via git+LFS, so this needs git-lfs and a lot of disk/time.
+fetch_acme_util() {
+  local dest="$DATA_DIR/acme-util"
+  git lfs version >/dev/null 2>&1 || die "acme-util needs git-lfs (install: brew install git-lfs / apt-get install git-lfs)"
+  if [ -d "$dest/.git" ]; then
+    log "Acme full dataset present, pulling latest (may transfer GBs)"
+    git -C "$dest" pull --ff-only || warn "acme-util pull failed (continuing)"
+    return
+  fi
+  warn "acme-util pulls the FULL Acme dataset (~80 GB) from HuggingFace via LFS."
+  warn "ensure adequate disk/bandwidth; Ctrl-C now to abort."
+  log "Acme full -> $dest"
+  git clone "$ACME_HF_REPO" "$dest" || die "acme-util clone failed (HuggingFace/git-lfs)"
+  log "Acme full done. Raw DCGM/Prometheus/IPMI utilization + power under $dest."
 }
 
 # clusterdata's bundled v2020 analysis notebook + simulator read CSVs from
@@ -180,9 +220,10 @@ targets=()
 for arg in "$@"; do
   case "$arg" in
     -h|--help) usage 0 ;;
-    --list) printf 'pai acme philly extra (default: pai acme; "all" = everything)\n'; exit 0 ;;
+    --list) printf 'pai acme philly extra acme-util  (default: pai acme; all = pai+acme+philly+extra; everything = all+acme-util)\n'; exit 0 ;;
     all) targets=(pai acme philly extra) ;;
-    pai|acme|philly|extra) targets+=("$arg") ;;
+    everything) targets=(pai acme philly extra acme-util) ;;
+    pai|acme|philly|extra|acme-util) targets+=("$arg") ;;
     *) die "unknown argument: $arg (try --help)" ;;
   esac
 done
@@ -194,10 +235,11 @@ log "targets: ${targets[*]}"
 
 for t in "${targets[@]}"; do
   case "$t" in
-    pai)    fetch_pai ;;
-    acme)   fetch_acme ;;
-    philly) fetch_philly ;;
-    extra)  fetch_extra ;;
+    pai)       fetch_pai ;;
+    acme)      fetch_acme ;;
+    philly)    fetch_philly ;;
+    extra)     fetch_extra ;;
+    acme-util) fetch_acme_util ;;
   esac
 done
 
