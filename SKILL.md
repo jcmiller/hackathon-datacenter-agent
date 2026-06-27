@@ -1,16 +1,19 @@
-# EvoSentinel Skills
+# EvoSentinel Skills (Multi-Stage)
 
-## monitor_telemetry
-Analyze current and historical telemetry from the simulator. Detect anomalies in temperature, voltage, power quality, fan speeds, humidity, etc.
+## Classifier Skills (Lightweight)
+- Fast triage of telemetry batches.
+- Output structured JSON with failure type and confidence.
 
-## perform_rca
-Correlate multiple metrics for root cause (e.g., high temp + rising fan RPM = possible dust or cooling failure; voltage sags with power draw spikes).
+## Analyzer Skills
+- monitor_telemetry: Ingest and baseline DCGM metrics.
+- perform_rca: Correlate GPU temp/util/power/ECC across time and servers.
+- plan_and_execute_remediation: Safe actions in sim (throttle clocks, load migrate conceptually, isolate).
 
-## plan_and_execute_remediation
-Propose and execute safe actions in the simulator (e.g., load shed, isolate faulty component, adjust cooling).
+## Self-Improver Skills
+- reflect_and_self_update: Review full trace + outcome metrics. Critique (e.g. missed early signals). Propose + apply updates to prompts, thresholds, or new functions in SKILL.md / playbooks.
+- Validate improvements by simulating replay.
 
-## profile_environment
-Given location/baseline or env params, identify risks (dust in arid, humidity in coastal) and add/adapt monitoring heuristics.
+## Environment Profiling (Cross-Stage)
+- Adapt monitoring for arid (dust proxy via fan effort + temp delta) or coastal (humidity correlations).
 
-## reflect_and_self_update
-After incident: Review full trace and outcome metrics (detection time, remediation efficacy). Critique performance, propose specific improvements (thresholds, new correlations, new functions), and apply them by editing SKILL.md or creating playbook code. Always validate changes.
+All skills support structured outputs and persistent state via Antigravity env_id.

@@ -1,25 +1,36 @@
 # EvoSentinel DC
 
-**Self-Improving Data Center Hardware Resilience Agent**
+**Self-Improving Multi-Stage Agentic System for Data Center GPU Resilience**
 
 ## Hackathon Project for 2026 AI Engineer World's Fair
 
-Built with Gemini 3.5 Managed Agents (Antigravity) for the **Self-Improvement Stack** theme.
+Built with Gemini 3.5 / Antigravity for the **Self-Improvement Stack** theme. Leverages DCGM-inspired GPU telemetry.
 
-## Overview
-An autonomous agent that simulates a data center, monitors hardware telemetry, detects and remediates failures (overheating, voltage instability, environment-specific issues like dust in arid zones), and continuously improves its own skills via reflection and persistent SKILL.md updates in stateful Antigravity environment.
+## Multi-Stage Architecture
+1. **Monitoring Loop** - Continuous telemetry ingestion.
+2. **Classifier** (small Gemini) - Fast failure detection & typing.
+3. **Analyzer** (Antigravity) - Deep RCA & remediation.
+4. **Self-Improver** - Reflection + autonomous skill evolution.
 
-## Features
-- Realistic multi-rack DC simulator
-- Antigravity-managed agent with custom skills
-- Self-improvement loop (reflection → skill evolution)
-- Environment-specific risk profiling
+See ARCHITECTURE.md for detailed flow and diagrams.
 
-## Setup
-1. Get Gemini API key from https://aistudio.google.com/api-keys
-2. `pip install google-generativeai`
-3. Run demo scripts (will provision Antigravity sessions)
+## Quick Start
+1. `export GEMINI_API_KEY=...`
+2. `pip install -r requirements.txt`
+3. `python demo/main_loop_demo.py` (basic loop + classifier)
+4. Extend with Antigravity for full analyzer/self-improver.
 
-See `demo/` for execution examples.
+## Key Files
+- simulator.py: Enhanced DCGM GPU metrics + env modes.
+- classifier.py: Lightweight failure classifier.
+- main_loop.py: Orchestration skeleton.
+- self_improver.py: Reflection skeleton.
+- ARCHITECTURE.md, PLAN.md, SKILL.md, AGENTS.md.
 
-Repo is public for hackathon submission.
+Public repo for submission. Strong foundation after 5 iterations of refinement.
+
+## Demo Highlights for Judges
+- Live multi-stage pipeline.
+- Visible self-improvement (before/after on novel GPU failures).
+- Realistic DCGM telemetry.
+- High technicality + originality in critical infrastructure domain.
