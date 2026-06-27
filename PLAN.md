@@ -1,15 +1,14 @@
 # EvoSentinel DC Hackathon Plan & Notes
 
-## Project Overview
-... (previous content retained, now with Iteration 1 complete)
+... (Iteration 1 & 2 logged)
 
-**Current Status (after Iteration 1)**: Multi-stage architecture defined in ARCHITECTURE.md. PLAN updated.
+**Current Status (after Iteration 2)**: classifier.py implemented and testable. main_loop.py skeleton added in Iteration 3.
 
 ## Iteration Log
-- **Iteration 1 (done)**: Multi-stage docs (PLAN + ARCHITECTURE.md). Classifier skeleton added.
-- Iteration 2: Integrate classifier into simulator loop; basic main_loop skeleton; update SKILL.md for stages.
-- Iteration 3: Analyzer Antigravity integration + RCA examples.
-- Iteration 4: Self-improver with file edit + validation.
-- Iteration 5: Full orchestration, traces, demo polish, submission.
+- Iteration 1 (done): Multi-stage docs.
+- Iteration 2 (done): classifier.py + PLAN update.
+- **Iteration 3 (in progress)**: main_loop.py orchestration skeleton integrating sim + classifier. Next: Analyzer integration.
+- Iteration 4: Self-improver.
+- Iteration 5: Polish & submit.
 
-... (rest of previous PLAN content)
+...
