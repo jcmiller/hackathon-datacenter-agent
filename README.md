@@ -26,11 +26,27 @@ See ARCHITECTURE.md for detailed flow and diagrams.
 3. `python demo/main_loop_demo.py` (basic loop + classifier)
 4. Extend with Antigravity for full analyzer/self-improver.
 
+## Real-World Data
+Ground the simulator/classifier in production GPU-cluster telemetry:
+
+```bash
+scripts/download_datasets.sh        # PAI 2020 + Acme (default)
+scripts/download_datasets.sh all    # + Philly (best-effort) + extra Alibaba traces
+scripts/download_datasets.sh --list # show targets
+```
+
+Datasets land in `data/` (gitignored, ~4 GB). PAI's per-worker GPU/mem
+utilization (`pai_sensor_table`) is the closest match to our DCGM telemetry;
+Acme adds LLM-cluster failure/queue dynamics. **See [docs/DATA.md](docs/DATA.md)
+for full schema, sizes, and which trace to use.**
+
 ## Key Files
 - simulator.py: Enhanced DCGM GPU metrics + env modes.
 - classifier.py: Lightweight failure classifier.
 - main_loop.py: Orchestration skeleton.
 - self_improver.py: Reflection skeleton.
+- scripts/download_datasets.sh: Fetch real GPU-cluster traces into `data/`.
+- docs/DATA.md: What each dataset contains and how to load it.
 - ARCHITECTURE.md, PLAN.md, SKILL.md, AGENTS.md.
 
 ## Leveraging Hackathon Partner Resources
