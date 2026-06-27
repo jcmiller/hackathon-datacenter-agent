@@ -1,0 +1,10 @@
+# Real-world trace datasets — large, fetched via scripts/download_datasets.sh.
+# Never committed; see docs/DATA.md for what lives here.
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
