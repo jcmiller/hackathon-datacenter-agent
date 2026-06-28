@@ -1,5 +1,5 @@
 import pandas as pd
-import backend.classifier as clf
+import gpusitter.detection.classifier as clf
 
 
 def test_fit_and_auc_perfect_separation():

@@ -1,6 +1,6 @@
 import pandas as pd
-from backend import stream
-from backend.stream import warm_start, stream_jobs
+from gpusitter.detection import stream
+from gpusitter.detection.stream import warm_start, stream_jobs
 
 def _write(tmp_path):
     rows = [{"job_id": i, "state": "COMPLETED"} for i in range(5)]

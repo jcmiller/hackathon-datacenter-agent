@@ -1,6 +1,6 @@
-import backend.stream as stream
-import backend.classifier as classifier
-import backend.tools as tools
+import gpusitter.detection.stream as stream
+import gpusitter.detection.classifier as classifier
+import gpusitter.agent.tools as tools
 
 def _seed_history():
     stream.reset_history(); classifier.reset()

@@ -3,9 +3,9 @@ import asyncio, json
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
-import backend.stream as stream
-import backend.classifier as classifier
-from backend.agent import triage  # noqa: F401 — re-exported so tests can monkeypatch
+from ..detection import stream
+from ..detection import classifier
+from ..agent.agent import triage  # noqa: F401 — re-exported so tests can monkeypatch
 
 app = FastAPI()
 

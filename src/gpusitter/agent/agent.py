@@ -2,8 +2,8 @@ from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from backend.priors import DOMAIN_PRIORS
-from backend import tools
+from .priors import DOMAIN_PRIORS
+from . import tools
 
 INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster.
 An incident just fired. Do the triage a human on-call would do:
