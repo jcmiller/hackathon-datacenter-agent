@@ -10,39 +10,39 @@
     "n_left_censored": 135
   },
   "frequency": {
-    "total_events": 857,
+    "total_events": 852,
     "distinct_event_gpus": 851,
     "by_code": {
       "43": {
-        "events": 795,
+        "events": 794,
         "meaning": "GPU stopped processing (fell off bus / hang)",
         "severity": "fatal_hang"
       },
       "31": {
-        "events": 56,
+        "events": 55,
         "meaning": "GPU memory page fault (MMU / illegal address)",
         "severity": "memory_fault"
-      },
-      "45": {
-        "events": 4,
-        "meaning": "Preemptive cleanup (robust channel; often app-induced)",
-        "severity": "soft_cleanup"
       },
       "94": {
         "events": 2,
         "meaning": "Contained ECC error",
         "severity": "contained_ecc"
+      },
+      "45": {
+        "events": 1,
+        "meaning": "Preemptive cleanup (robust channel; often app-induced)",
+        "severity": "soft_cleanup"
       }
     },
     "observed_gpu_hours": 882506.2,
-    "mtbf_gpu_hours_per_event": 1029.8,
-    "events_per_gpu_hour": 0.000971
+    "mtbf_gpu_hours_per_event": 1035.8,
+    "events_per_gpu_hour": 0.000965
   },
   "temporal": {
     "burst_bin_seconds": 300,
     "by_day": {
       "2023-08-15": 63,
-      "2023-08-16": 326,
+      "2023-08-16": 323,
       "2023-08-17": 324,
       "2023-08-18": 112,
       "2023-08-21": 11,
@@ -51,8 +51,8 @@
       "2023-08-24": 3,
       "2023-08-27": 1,
       "2023-08-28": 3,
-      "2023-08-29": 2,
-      "2023-08-30": 7
+      "2023-08-29": 1,
+      "2023-08-30": 6
     },
     "largest_burst": {
       "window": [
@@ -66,75 +66,75 @@
         "43": 106,
         "31": 9
       },
-      "frac_of_all_events": 0.134
+      "frac_of_all_events": 0.135
     },
-    "sporadic_events": 742
+    "sporadic_events": 737
   },
   "precursors": {
     "GPU_TEMP": {
-      "events_with_any_baseline_data": 419,
+      "events_with_any_baseline_data": 416,
       "by_horizon": {
         "60": {
           "horizon_seconds": 60,
-          "events_with_lead_samples": 419,
-          "mean_delta_vs_baseline": -1.437,
+          "events_with_lead_samples": 416,
+          "mean_delta_vs_baseline": -1.502,
           "median_delta_vs_baseline": -0.5,
-          "mean_slope_per_min": -0.0916,
-          "frac_detectable_2sigma": 0.076
+          "mean_slope_per_min": -0.0923,
+          "frac_detectable_2sigma": 0.075
         },
         "300": {
           "horizon_seconds": 300,
-          "events_with_lead_samples": 419,
-          "mean_delta_vs_baseline": -1.206,
+          "events_with_lead_samples": 416,
+          "mean_delta_vs_baseline": -1.228,
           "median_delta_vs_baseline": -1.2,
-          "mean_slope_per_min": -0.1156,
+          "mean_slope_per_min": -0.1276,
           "frac_detectable_2sigma": 0.043
         },
         "600": {
           "horizon_seconds": 600,
-          "events_with_lead_samples": 419,
-          "mean_delta_vs_baseline": -1.092,
+          "events_with_lead_samples": 416,
+          "mean_delta_vs_baseline": -1.106,
           "median_delta_vs_baseline": -1.35,
-          "mean_slope_per_min": -0.0447,
-          "frac_detectable_2sigma": 0.033
+          "mean_slope_per_min": -0.0484,
+          "frac_detectable_2sigma": 0.034
         }
       }
     },
     "POWER_USAGE": {
+      "events_with_any_baseline_data": 411,
+      "by_horizon": {
+        "60": {
+          "horizon_seconds": 60,
+          "events_with_lead_samples": 411,
+          "mean_delta_vs_baseline": -30.887,
+          "median_delta_vs_baseline": -0.15,
+          "mean_slope_per_min": 12.2499,
+          "frac_detectable_2sigma": 0.071
+        },
+        "300": {
+          "horizon_seconds": 300,
+          "events_with_lead_samples": 411,
+          "mean_delta_vs_baseline": -33.606,
+          "median_delta_vs_baseline": -36.45,
+          "mean_slope_per_min": -1.075,
+          "frac_detectable_2sigma": 0.017
+        },
+        "600": {
+          "horizon_seconds": 600,
+          "events_with_lead_samples": 411,
+          "mean_delta_vs_baseline": -31.82,
+          "median_delta_vs_baseline": -41.28,
+          "mean_slope_per_min": -0.7286,
+          "frac_detectable_2sigma": 0.022
+        }
+      }
+    },
+    "MEM_CLOCK": {
       "events_with_any_baseline_data": 414,
       "by_horizon": {
         "60": {
           "horizon_seconds": 60,
           "events_with_lead_samples": 414,
-          "mean_delta_vs_baseline": -29.537,
-          "median_delta_vs_baseline": -0.075,
-          "mean_slope_per_min": 12.0986,
-          "frac_detectable_2sigma": 0.075
-        },
-        "300": {
-          "horizon_seconds": 300,
-          "events_with_lead_samples": 414,
-          "mean_delta_vs_baseline": -33.124,
-          "median_delta_vs_baseline": -36.015,
-          "mean_slope_per_min": -0.8541,
-          "frac_detectable_2sigma": 0.019
-        },
-        "600": {
-          "horizon_seconds": 600,
-          "events_with_lead_samples": 414,
-          "mean_delta_vs_baseline": -31.47,
-          "median_delta_vs_baseline": -41.028,
-          "mean_slope_per_min": -0.6607,
-          "frac_detectable_2sigma": 0.024
-        }
-      }
-    },
-    "MEM_CLOCK": {
-      "events_with_any_baseline_data": 417,
-      "by_horizon": {
-        "60": {
-          "horizon_seconds": 60,
-          "events_with_lead_samples": 417,
           "mean_delta_vs_baseline": 0.0,
           "median_delta_vs_baseline": 0.0,
           "mean_slope_per_min": 0.0,
@@ -142,7 +142,7 @@
         },
         "300": {
           "horizon_seconds": 300,
-          "events_with_lead_samples": 417,
+          "events_with_lead_samples": 414,
           "mean_delta_vs_baseline": 0.0,
           "median_delta_vs_baseline": 0.0,
           "mean_slope_per_min": 0.0,
@@ -150,7 +150,7 @@
         },
         "600": {
           "horizon_seconds": 600,
-          "events_with_lead_samples": 417,
+          "events_with_lead_samples": 414,
           "mean_delta_vs_baseline": 0.0,
           "median_delta_vs_baseline": 0.0,
           "mean_slope_per_min": 0.0,
@@ -1049,21 +1049,6 @@
       "gpu": "172.31.13.45#7",
       "t": "2023-08-16 00:32:30+08:00",
       "code": 43
-    },
-    {
-      "gpu": "172.31.5.120#4",
-      "t": "2023-08-16 01:28:30+08:00",
-      "code": 45
-    },
-    {
-      "gpu": "172.31.5.120#7",
-      "t": "2023-08-16 01:29:30+08:00",
-      "code": 45
-    },
-    {
-      "gpu": "172.31.5.120#1",
-      "t": "2023-08-16 01:29:30+08:00",
-      "code": 45
     },
     {
       "gpu": "172.31.0.7#5",
@@ -4406,16 +4391,6 @@
       "code": 31
     },
     {
-      "gpu": "172.31.0.232#4",
-      "t": "2023-08-29 14:43:15+08:00",
-      "code": 43
-    },
-    {
-      "gpu": "172.31.0.86#0",
-      "t": "2023-08-30 12:49:30+08:00",
-      "code": 31
-    },
-    {
       "gpu": "172.31.0.86#2",
       "t": "2023-08-30 13:13:30+08:00",
       "code": 31
@@ -4447,7 +4422,7 @@
     }
   ],
   "label_scheme": {
-    "event_definition": "rising edge of XID_ERRORS gauge (empty/0 cleared-baseline -> nonzero, or change to a different nonzero code); codes already present at the first sample (t0) are left-censored and excluded",
+    "event_definition": "Xid onset = transition INTO a fault (nonzero where prior observed state was non-fault: healthy 0 or idle/empty cell). Latched faults (nonzero->nonzero, incl. code change with no clear) and t0-left-censored states are excluded. Empty-aware (clear->same-code re-raise is a new onset); detector = gpusitter.rca.job_join.stream_xid_onset_records",
     "severity_groups": {
       "43": "fatal_hang",
       "79": "fatal_hang",
