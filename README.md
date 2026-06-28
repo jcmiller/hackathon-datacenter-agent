@@ -30,10 +30,10 @@ Two things make this more than "an LLM on a dashboard":
 | `classifier.py` | fit candidate, score ROC-AUC, hold + promote the live model |
 | `tools.py` | agent tools: `get_sensory`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution`, `train_and_validate` |
 | `priors.py` | GPU-failure domain priors injected into the agent |
-| `agent.py` | Google ADK + Gemini agent: investigate → improve model → dispose |
+| `agent.py` | Google ADK + Gemini 3.5 Flash agent: investigate → improve model → dispose |
 | `sim.py` | FastAPI: SSE incident stream, `/triage`, `/model`; serves the dashboard |
 
-**Harness:** Google ADK + Gemini 2.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox; that's a stretch for autonomous actuation).
+**Harness:** Google ADK + Gemini 3.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox; that's a stretch for autonomous actuation).
 
 ## Quick start (local, no big data needed)
 
