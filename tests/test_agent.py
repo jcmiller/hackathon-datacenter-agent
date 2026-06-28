@@ -1,4 +1,4 @@
-from backend.agent import build_agent
+from gpusitter.agent.agent import build_agent
 
 
 def test_agent_has_tools_and_priors():

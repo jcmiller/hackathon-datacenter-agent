@@ -1,5 +1,5 @@
 import pandas as pd
-from backend.dataset import FAIL_STATES
+from .dataset import FAIL_STATES
 
 HISTORY = []
 

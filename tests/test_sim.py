@@ -1,8 +1,8 @@
 """Tests for backend/sim.py — run offline, no API key needed."""
 import csv, pathlib
-import backend.sim as sim
-import backend.stream as stream
-import backend.classifier as clf
+import gpusitter.app.sim as sim
+import gpusitter.detection.stream as stream
+import gpusitter.detection.classifier as clf
 from fastapi.testclient import TestClient
 
 client = TestClient(sim.app)

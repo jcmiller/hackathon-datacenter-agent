@@ -1,4 +1,4 @@
-import backend.tools as tools
+import gpusitter.agent.tools as tools
 
 def test_get_telemetry(tmp_path, monkeypatch):
     import pandas as pd

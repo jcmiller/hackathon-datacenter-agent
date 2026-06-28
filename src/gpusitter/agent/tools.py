@@ -1,8 +1,9 @@
-import backend.stream as stream
-import backend.dataset as dataset
-import backend.classifier as classifier
-from backend.loader import load_incidents, telemetry_window, correlated_failures
-from backend.memory import search_incidents, append_incident
+from ..detection import stream
+from ..detection import dataset
+from ..detection import classifier
+from ..rca.job_join import correlated_jobs, load_incidents
+from ..telemetry.window import window_stats
+from .memory import search_incidents, append_incident
 
 TRACE_CSV = "data/trace_kalos.csv"
 # Telemetry files mapped to the real DCGM field they represent.
@@ -15,14 +16,14 @@ def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
     production fleet emits (dcgm-exporter). Values are window aggregates."""
     return {
-        "DCGM_FI_DEV_POWER_USAGE": telemetry_window(POWER_CSV, fail_time - window, fail_time + window),
-        "DCGM_FI_DEV_GPU_TEMP": telemetry_window(TEMP_CSV, fail_time - window, fail_time + window),
+        "DCGM_FI_DEV_POWER_USAGE": window_stats(POWER_CSV, fail_time - window, fail_time + window),
+        "DCGM_FI_DEV_GPU_TEMP": window_stats(TEMP_CSV, fail_time - window, fail_time + window),
     }
 
 def find_correlated_failures(fail_time, window=120):
     """Find other node failures near this incident in time."""
     inc = load_incidents(TRACE_CSV)
-    corr = correlated_failures(inc, fail_time, window)
+    corr = correlated_jobs(inc, fail_time, window)
     types = {c["type"] for c in corr}
     return {"count": len(corr), "jobs": [c["job_id"] for c in corr],
             "shared_type": next(iter(types)) if len(types) == 1 else None}

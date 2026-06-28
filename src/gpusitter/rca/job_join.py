@@ -28,18 +28,71 @@ def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts)
 
 
-def load_failed_jobs(trace_csv: str) -> List[FailedJob]:
-    """FAILED jobs with a parseable fail_time, as tz-aware records."""
+# Hardware/job failure states (loader parity).
+FAIL_STATES = {"NODE_FAIL", "FAILED"}
+_INCIDENT_KEEP = (
+    "job_id", "type", "node_num", "gpu_num", "state", "fail_time", "duration", "user",
+)
+
+
+def load_failed_jobs(trace_csv: str, states=FAIL_STATES) -> List[FailedJob]:
+    """Failed jobs with a parseable ISO fail_time, as tz-aware records.
+
+    The datetime/real-trace path (used by the coincidence analysis); ``states``
+    defaults to FAILED+NODE_FAIL. See :func:`load_incidents` for the numeric
+    fail_time path the agent tools use.
+    """
     jobs = []
     with open(trace_csv, newline="") as fh:
         for row in csv.DictReader(fh):
-            if row.get("state") != "FAILED":
+            if row.get("state") not in states:
                 continue
             ft = (row.get("fail_time") or "").strip()
             if not ft:
                 continue
-            jobs.append(FailedJob(job_id=row["job_id"], fail_dt=_parse(ft)))
+            try:
+                fail_dt = _parse(ft)
+            except ValueError:
+                continue  # numeric/relative fail_time — not the ISO analysis path
+            jobs.append(FailedJob(job_id=row["job_id"], fail_dt=fail_dt))
     return jobs
+
+
+def load_incidents(trace_csv: str) -> List[dict]:
+    """Failure incidents (NODE_FAIL|FAILED, fail_time present), sorted by fail_time.
+
+    Numeric fail_time (relative seconds), dict records — the shape the agent's
+    tools consume. Pandas-free port of backend/loader.load_incidents.
+    """
+    out = []
+    with open(trace_csv, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("state") not in FAIL_STATES:
+                continue
+            ft = (row.get("fail_time") or "").strip()
+            if ft == "" or ft.lower() == "nan":
+                continue
+            try:
+                ftv = float(ft)
+            except ValueError:
+                continue
+            rec = {k: row.get(k) for k in _INCIDENT_KEEP}
+            rec["fail_time"] = ftv
+            out.append(rec)
+    out.sort(key=lambda r: r["fail_time"])
+    return out
+
+
+def correlated_jobs(incidents, fail_time, window):
+    """Other failure incidents within +/- ``window`` of ``fail_time`` (excludes self).
+
+    Job<->job temporal correlation (port of loader.correlated_failures) — distinct
+    from the Xid-onset cohort finder.
+    """
+    return [
+        i for i in incidents
+        if i["fail_time"] != fail_time and abs(i["fail_time"] - fail_time) <= window
+    ]
 
 
 def xid_onset_events(store) -> List[Tuple[datetime, str]]:
