@@ -30,21 +30,26 @@
 data/
   trace_kalos.csv              # job trace (provided, downloaded separately)
   util/*.csv                   # telemetry (Time + per-node-IP columns)
-src/
+backend/                       # all app code (frontend/ becomes a sibling later — not yet scoped)
+  __init__.py
   loader.py                    # read trace + telemetry, expose incidents & windows
   memory.py                    # JSON incident/SOP store: search + append
   priors.py                    # Meta co-occurrence domain knowledge (agent skill)
   tools.py                     # RCA tool functions the agent calls
   sim.py                       # FastAPI: replay incidents over SSE, telemetry endpoints
   agent.py                     # Google ADK agent: Gemini + tools + priors
-  dashboard/index.html         # minimal SSE dashboard (incident feed + agent tab)
+  dashboard/index.html         # minimal SSE dashboard (moves to frontend/ when scoped)
 tests/
   test_loader.py
   test_memory.py
   test_tools.py
   test_agent.py
-data/sop.json                  # memory store (created at runtime)
+conftest.py                    # puts repo root on sys.path (backend importable)
+pytest.ini                     # testpaths = tests
+data/                          # AcmeTrace data + sop.json (repo root, gitignored; run all cmds from repo root)
 ```
+
+> **Imports & cwd:** modules import as `from backend.X import ...`; tests run via `pytest` from the repo root; the server runs as `uvicorn backend.sim:app` from the repo root so relative `data/` resolves.
 
 **Lane mapping (Notion board):** loader+sim = Data + Backend/Harness · tools+priors+agent = Sensor Tools + Backend/Harness · dashboard = Frontend.
 
@@ -61,14 +66,14 @@ The sim must look like the real sensor stack so the agent calls the same surface
 | **Xid** (kernel log `NVRM: Xid`) | last fault code (48/79/94…) | **absent** | inferred from priors; synthetic-injected only if labeled |
 | **Prometheus / node_exporter** (`:9100`) | `node_cpu_*`, `node_memory_*` | `util_pkl/util_cpu_mem_*` | not in MVP |
 
-**MCP note (board card #3):** no first-party DCGM MCP server exists. Authentic options: (a) wrap `src/tools.py` as a FastMCP server, or (b) expose a dcgm-exporter-style `/metrics` surface and point a Prometheus MCP server (`pab1it0/prometheus-mcp-server`) at it. MCP is **Stretch under harness B**, **core under harness A** (Managed Agents sandbox reaches tools via MCP).
+**MCP note (board card #3):** no first-party DCGM MCP server exists. Authentic options: (a) wrap `backend/tools.py` as a FastMCP server, or (b) expose a dcgm-exporter-style `/metrics` surface and point a Prometheus MCP server (`pab1it0/prometheus-mcp-server`) at it. MCP is **Stretch under harness B**, **core under harness A** (Managed Agents sandbox reaches tools via MCP).
 
 ---
 
 ### Task 1: AcmeTrace Loader
 
 **Files:**
-- Create: `src/loader.py`
+- Create: `backend/loader.py`
 - Test: `tests/test_loader.py`
 
 **Interfaces:**
@@ -83,7 +88,7 @@ The sim must look like the real sensor stack so the agent calls the same surface
 ```python
 # tests/test_loader.py
 import pandas as pd
-from src.loader import load_incidents, telemetry_window, correlated_failures
+from backend.loader import load_incidents, telemetry_window, correlated_failures
 
 def _write_trace(tmp_path):
     df = pd.DataFrame([
@@ -127,13 +132,13 @@ def test_correlated_failures_within_window(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_loader.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'src.loader'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'backend.loader'`.
 Also manually confirm timestamp format: `python -c "import pandas as pd; print(pd.read_csv('data/trace_kalos.csv')[['fail_time']].dropna().head())"` — values should be ~10-digit Unix seconds. If they are datetime strings, add `pd.to_datetime(...).astype('int64')//10**9` in the loader.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# src/loader.py
+# backend/loader.py
 import pandas as pd
 
 FAIL_STATES = {"NODE_FAIL", "FAILED"}
@@ -177,7 +182,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/loader.py tests/test_loader.py
+git add backend/loader.py tests/test_loader.py
 git commit -m "feat: AcmeTrace loader — incidents, telemetry windows, correlation"
 ```
 
@@ -186,7 +191,7 @@ git commit -m "feat: AcmeTrace loader — incidents, telemetry windows, correlat
 ### Task 2: Incident Memory / SOP Store
 
 **Files:**
-- Create: `src/memory.py`
+- Create: `backend/memory.py`
 - Test: `tests/test_memory.py`
 
 **Interfaces:**
@@ -199,7 +204,7 @@ git commit -m "feat: AcmeTrace loader — incidents, telemetry windows, correlat
 
 ```python
 # tests/test_memory.py
-from src.memory import search_incidents, append_incident
+from backend.memory import search_incidents, append_incident
 
 def test_search_empty_when_no_file(tmp_path):
     assert search_incidents("train", str(tmp_path/"sop.json")) == []
@@ -218,12 +223,12 @@ def test_append_then_search_roundtrip(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_memory.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'src.memory'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'backend.memory'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# src/memory.py
+# backend/memory.py
 import json, os
 
 def search_incidents(incident_type, path="data/sop.json"):
@@ -251,7 +256,7 @@ Expected: 2 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/memory.py tests/test_memory.py
+git add backend/memory.py tests/test_memory.py
 git commit -m "feat: JSON incident/SOP memory store"
 ```
 
@@ -260,7 +265,7 @@ git commit -m "feat: JSON incident/SOP memory store"
 ### Task 3: Domain Priors (Agent Skill)
 
 **Files:**
-- Create: `src/priors.py`
+- Create: `backend/priors.py`
 
 **Interfaces:**
 - Produces: `DOMAIN_PRIORS: str` — a concise knowledge block (Meta 2024 co-occurrence priors) injected into the agent's system prompt so it reads GPU symptoms like a domain expert.
@@ -268,7 +273,7 @@ git commit -m "feat: JSON incident/SOP memory store"
 - [ ] **Step 1: Write the module (no test — static knowledge string)**
 
 ```python
-# src/priors.py
+# backend/priors.py
 # Co-occurrence priors distilled from Meta's 2024 LLM-fleet reliability reporting.
 # Loaded into the agent's instruction so it reasons about cause from symptoms.
 DOMAIN_PRIORS = """\
@@ -289,13 +294,13 @@ GPU fleet failure domain knowledge (priors, not ground truth):
 
 - [ ] **Step 2: Verify import**
 
-Run: `python -c "from src.priors import DOMAIN_PRIORS; print(len(DOMAIN_PRIORS))"`
+Run: `python -c "from backend.priors import DOMAIN_PRIORS; print(len(DOMAIN_PRIORS))"`
 Expected: prints a positive integer (non-empty).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/priors.py
+git add backend/priors.py
 git commit -m "feat: Meta co-occurrence domain priors as agent skill"
 ```
 
@@ -304,11 +309,11 @@ git commit -m "feat: Meta co-occurrence domain priors as agent skill"
 ### Task 4: RCA Tools
 
 **Files:**
-- Create: `src/tools.py`
+- Create: `backend/tools.py`
 - Test: `tests/test_tools.py`
 
 **Interfaces:**
-- Consumes: `src.loader` (`telemetry_window`, `correlated_failures`), `src.memory` (`search_incidents`, `append_incident`).
+- Consumes: `backend.loader` (`telemetry_window`, `correlated_failures`), `backend.memory` (`search_incidents`, `append_incident`).
 - Produces (plain functions the ADK agent wraps as tools; all return JSON-serializable dicts/strings):
   - `get_telemetry(fail_time: int, window: int = 120) -> dict` — telemetry around the incident keyed by real DCGM field names (`DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`), each a window aggregate. Reads `POWER_CSV`, `TEMP_CSV`.
   - `find_correlated_failures(fail_time: int, window: int = 120) -> dict` — `{"count": int, "jobs": [job_id...], "shared_type": str|None}`. Reads incidents from `TRACE_CSV`.
@@ -322,7 +327,7 @@ Module-level constants `TRACE_CSV = "data/trace_kalos.csv"` and `TELEMETRY_CSV =
 
 ```python
 # tests/test_tools.py
-import src.tools as tools
+import backend.tools as tools
 
 def test_get_telemetry(tmp_path, monkeypatch):
     import pandas as pd
@@ -358,14 +363,14 @@ def test_page_and_record(tmp_path, monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_tools.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'src.tools'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'backend.tools'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# src/tools.py
-from src.loader import load_incidents, telemetry_window, correlated_failures
-from src.memory import search_incidents, append_incident
+# backend/tools.py
+from backend.loader import load_incidents, telemetry_window, correlated_failures
+from backend.memory import search_incidents, append_incident
 
 TRACE_CSV = "data/trace_kalos.csv"
 # Telemetry files mapped to the real DCGM field they represent.
@@ -416,7 +421,7 @@ Expected: 3 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/tools.py tests/test_tools.py
+git add backend/tools.py tests/test_tools.py
 git commit -m "feat: RCA tools — telemetry, correlation, memory search, paging, record"
 ```
 
@@ -425,11 +430,11 @@ git commit -m "feat: RCA tools — telemetry, correlation, memory search, paging
 ### Task 5: Google ADK Agent
 
 **Files:**
-- Create: `src/agent.py`
+- Create: `backend/agent.py`
 - Test: `tests/test_agent.py`
 
 **Interfaces:**
-- Consumes: `src.tools` (all five functions), `src.priors.DOMAIN_PRIORS`.
+- Consumes: `backend.tools` (all five functions), `backend.priors.DOMAIN_PRIORS`.
 - Produces:
   - `build_agent() -> google.adk.agents.Agent` — Gemini 2.5 Flash agent with the five tools and priors-injected instruction.
   - `triage(incident: dict) -> str` — runs the agent on one incident dict, returns the final disposition text. (Requires `GOOGLE_API_KEY` in env; the unit test only checks construction + tool registration, not a live call.)
@@ -438,7 +443,7 @@ git commit -m "feat: RCA tools — telemetry, correlation, memory search, paging
 
 ```python
 # tests/test_agent.py
-from src.agent import build_agent
+from backend.agent import build_agent
 
 def test_agent_has_tools_and_priors():
     a = build_agent()
@@ -451,17 +456,17 @@ def test_agent_has_tools_and_priors():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_agent.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'src.agent'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'backend.agent'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# src/agent.py
+# backend/agent.py
 from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
-from src.priors import DOMAIN_PRIORS
-from src import tools
+from backend.priors import DOMAIN_PRIORS
+from backend import tools
 
 INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster.
 An incident just fired. Do the triage a human on-call would do:
@@ -510,7 +515,7 @@ Expected: 1 passed. (No live API call — construction only.)
 
 Run:
 ```bash
-GOOGLE_API_KEY=... python -c "from src.agent import triage; \
+GOOGLE_API_KEY=... python -c "from backend.agent import triage; \
 print(triage({'job_id':'j1','type':'train','node_num':4,'state':'NODE_FAIL','fail_time':1700000000}))"
 ```
 Expected: A short disposition citing telemetry numbers and a decision. If the ADK API surface differs from the version installed, adjust the runner call per `pip show google-adk` docs — keep the tool list and instruction unchanged.
@@ -518,7 +523,7 @@ Expected: A short disposition citing telemetry numbers and a decision. If the AD
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/agent.py tests/test_agent.py
+git add backend/agent.py tests/test_agent.py
 git commit -m "feat: Google ADK + Gemini on-call RCA agent"
 ```
 
@@ -527,10 +532,10 @@ git commit -m "feat: Google ADK + Gemini on-call RCA agent"
 ### Task 6: Sim Backend (SSE incident stream + dashboard)
 
 **Files:**
-- Create: `src/sim.py`, `src/dashboard/index.html`
+- Create: `backend/sim.py`, `backend/dashboard/index.html`
 
 **Interfaces:**
-- Consumes: `src.loader.load_incidents`, `src.agent.triage`.
+- Consumes: `backend.loader.load_incidents`, `backend.agent.triage`.
 - Produces (FastAPI app `app`):
   - `GET /` → serves `dashboard/index.html`.
   - `GET /incidents` → SSE stream: emits the next incident every few seconds (replaying `trace_kalos.csv` in `fail_time` order, accelerated).
@@ -539,12 +544,12 @@ git commit -m "feat: Google ADK + Gemini on-call RCA agent"
 - [ ] **Step 1: Write the app**
 
 ```python
-# src/sim.py
+# backend/sim.py
 import asyncio, json
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from src.loader import load_incidents
-from src.agent import triage
+from backend.loader import load_incidents
+from backend.agent import triage
 
 app = FastAPI()
 INCIDENTS = load_incidents("data/trace_kalos.csv")
@@ -552,7 +557,7 @@ STEP_SECONDS = 3  # demo replay speed
 
 @app.get("/")
 def index():
-    return FileResponse("src/dashboard/index.html")
+    return FileResponse("backend/dashboard/index.html")
 
 @app.get("/incidents")
 async def incidents(request: Request):
@@ -572,7 +577,7 @@ async def do_triage(incident: dict):
 - [ ] **Step 2: Write the dashboard**
 
 ```html
-<!-- src/dashboard/index.html -->
+<!-- backend/dashboard/index.html -->
 <!doctype html><meta charset="utf-8"><title>GPU On-Call RCA</title>
 <style>
  body{font:14px system-ui;margin:0;display:grid;grid-template-columns:1fr 1fr;height:100vh}
@@ -600,13 +605,13 @@ async def do_triage(incident: dict):
 
 - [ ] **Step 3: Run the server and verify the stream**
 
-Run: `GOOGLE_API_KEY=... uvicorn src.sim:app --reload`
+Run: `GOOGLE_API_KEY=... uvicorn backend.sim:app --reload`
 Then: open `http://localhost:8000`, confirm incident cards appear, click one, confirm the agent disposition renders. Also verify the stream endpoint directly: `curl -N http://localhost:8000/incidents | head -c 300` shows `data: {...}` lines.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/sim.py src/dashboard/index.html
+git add backend/sim.py backend/dashboard/index.html
 git commit -m "feat: sim backend SSE incident stream + dashboard"
 ```
 
@@ -645,7 +650,7 @@ Reactive agent that automates GPU-fleet on-call triage on real AcmeTrace data.
 3. `export GOOGLE_API_KEY=...`
 
 ## Run
-`uvicorn src.sim:app --reload` → open http://localhost:8000
+`uvicorn backend.sim:app --reload` → open http://localhost:8000
 
 ## Test
 `pytest -v`
@@ -674,7 +679,7 @@ git commit -m "docs: demo wiring, requirements, run instructions"
 - **DSPy improvement loop:** optimize the agent instruction against a labelled set of incidents whose correct disposition is known; the SOP memory becomes the training signal.
 - **Robot-arm actuation:** a `hot_swap_gpu(node)` tool (simulated) the agent calls instead of paging, for the "physical actuation" demo beat.
 - **Embedding memory:** replace `search_past_incidents` type-match with Gemini-embedding cosine similarity over past summaries.
-- **MCP exposure:** wrap `src/tools.py` as a FastMCP server so the tools are reusable by any MCP client, not just this agent.
+- **MCP exposure:** wrap `backend/tools.py` as a FastMCP server so the tools are reusable by any MCP client, not just this agent.
 - **Deployed coding/actuation agent (Gemini Managed Agents):** when a disposition needs *autonomous code/ops work* — generate a remediation script, write the runbook, draft the ticket/PR, patch a config — the ADK brain spins off a **deployed Managed Agent** in a Google sandbox (the "repair arm" of the Notion vision; sandbox + code-exec is the right tool here, unlike for the brain). Feasibility: **skills port cleanly** (same `SKILL.md` priors feed both); **local domain tools reach it only via MCP or a handoff payload** (for pure coding tasks it mostly uses its own sandbox tools and won't need them). Doubles as the host's "Managed Agents" point — used where it actually fits.
 
 ---
