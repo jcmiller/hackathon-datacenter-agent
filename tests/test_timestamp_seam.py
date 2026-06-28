@@ -24,8 +24,7 @@ def test_get_telemetry_accepts_iso_time(tmp_path, monkeypatch):
         "2023-08-15 15:30:30+08:00,90\n"
         "2023-08-15 15:32:00+08:00,10\n"   # outside +/-60s window
     )
-    monkeypatch.setattr(tools, "POWER_CSV", str(pw))
-    monkeypatch.setattr(tools, "TEMP_CSV", str(pw))
+    monkeypatch.setattr(tools, "resolve_metric_csv", lambda metric, **kw: str(pw))
     out = tools.get_telemetry(fail_time=ISO, window=60)
     assert out["DCGM_FI_DEV_POWER_USAGE"]["samples"] == 2   # not 0 (silent-skip bug)
     assert out["DCGM_FI_DEV_POWER_USAGE"]["max"] == 90

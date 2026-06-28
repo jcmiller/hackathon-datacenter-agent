@@ -4,51 +4,141 @@ from datetime import datetime, timedelta
 from ..detection import stream
 from ..detection import dataset
 from ..detection import classifier
-from ..rca.job_join import correlated_jobs, load_incidents
-from ..telemetry.timeparse import parse_time_value
+from ..rca.job_join import (
+    correlated_jobs,
+    load_incidents,
+    stream_xid_onset_records,
+)
+from ..telemetry.sources import (
+    DCGM_FIELD_TO_METRIC,
+    metric_csv_relpath,
+    resolve_metric_csv,
+)
+from ..telemetry.timeparse import parse_time_value, window_bounds
 from ..telemetry.window import window_stats
 from .memory import search_incidents, append_incident
 
 TRACE_CSV        = "data/acme-util/data/job_trace/trace_kalos.csv"
-POWER_CSV        = "data/acme-util/data/utilization/kalos/POWER_USAGE.csv"
-TEMP_CSV         = "data/acme-util/data/utilization/kalos/GPU_TEMP.csv"
 SOP_PATH         = "data/sop.json"
 MODEL_STATE_PATH = "data/model_state.json"
 _TICKET = {"n": 0}
 _pending_updates: list[dict] = []
 
 
-def _window(fail_time, seconds):
-    """Return (start, end) bounds around fail_time using the telemetry timeparse seam."""
-    center = parse_time_value(fail_time)
-    if isinstance(center, datetime):
-        delta = timedelta(seconds=seconds)
-        return center - delta, center + delta
-    return center - seconds, center + seconds
+def _bound(value):
+    """JSON-friendly representation of a window bound (ISO for datetimes)."""
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def _xid_code(value):
+    """Render an observed Xid onset code as an int when it is integral (e.g. 43)."""
+    return int(value) if isinstance(value, float) and value.is_integer() else value
+
+
+def _metric_stats(metric, lo, hi):
+    """Resolve a canonical kalos metric CSV and aggregate over ``[lo, hi]``.
+
+    Every result carries provenance (source path, metric, window, sample count).
+    When the raw LFS object is not materialized on this host the metric is
+    reported as ``available: False`` with a reason — an explicit, grounded fact
+    for the agent, not a stack trace. Misconfigured/non-time-series sources still
+    fail loud (``ValueError`` from the source validator propagates).
+    """
+    try:
+        path = resolve_metric_csv(metric)
+    except FileNotFoundError as exc:
+        return {
+            "available": False,
+            "reason": "raw data not materialized",
+            "metric": metric,
+            "source": metric_csv_relpath(metric),
+            "window": [_bound(lo), _bound(hi)],
+            "detail": str(exc),
+        }
+    stats = window_stats(path, lo, hi)
+    return {
+        "available": True,
+        "metric": metric,
+        "source": path,
+        "window": [_bound(lo), _bound(hi)],
+        **stats,
+    }
 
 
 def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
-    production fleet emits (dcgm-exporter). Values are window aggregates."""
-    lo, hi = _window(fail_time, window)
+    production fleet emits (dcgm-exporter), read from the canonical kalos metric
+    CSVs (LFS-cache resolved). Each value is a window aggregate plus provenance,
+    or ``available: False`` when the raw data is not materialized here."""
+    lo, hi = window_bounds(fail_time, window)
     return {
-        "DCGM_FI_DEV_POWER_USAGE": window_stats(POWER_CSV, lo, hi),
-        "DCGM_FI_DEV_GPU_TEMP":    window_stats(TEMP_CSV,  lo, hi),
+        field: _metric_stats(metric, lo, hi)
+        for field, metric in DCGM_FIELD_TO_METRIC.items()
     }
 
 
-def find_correlated_failures(fail_time, window=120):
-    """Find other node failures near this incident in time."""
-    inc = load_incidents(TRACE_CSV)
-    corr = correlated_jobs(inc, fail_time, window)
-    types = {c["type"] for c in corr}
-    return {"count": len(corr), "jobs": [c["job_id"] for c in corr],
-            "shared_type": next(iter(types)) if len(types) == 1 else None}
+def find_correlated_failures(fail_time, window=120, source="jobs"):
+    """Find other failures near this incident in time.
+
+    ``source="jobs"`` (default): other FAILED/NODE_FAIL job records within +/-
+    ``window`` seconds (job<->job temporal correlation). ``source="xid"``:
+    edge-detected per-GPU Xid onsets within +/- ``window`` of the fail_time — the
+    preferred early-detection incident source — returning the GPU cohort and the
+    observed Xid code(s). Both carry provenance (artifact + count)."""
+    if source == "jobs":
+        inc = load_incidents(TRACE_CSV)
+        corr = correlated_jobs(inc, fail_time, window)
+        types = {c["type"] for c in corr}
+        return {
+            "source": "jobs",
+            "artifact": TRACE_CSV,
+            "count": len(corr),
+            "jobs": [c["job_id"] for c in corr],
+            "shared_type": next(iter(types)) if len(types) == 1 else None,
+        }
+    if source == "xid":
+        center = parse_time_value(fail_time)
+        if not isinstance(center, datetime):
+            raise ValueError(
+                "source='xid' requires an ISO fail_time — Xid telemetry is "
+                "wall-clock timestamped (e.g. '2023-08-15 15:30:00+08:00')"
+            )
+        try:
+            xid_path = resolve_metric_csv("XID_ERRORS")
+        except FileNotFoundError as exc:
+            return {
+                "source": "xid",
+                "available": False,
+                "reason": "raw data not materialized",
+                "artifact": metric_csv_relpath("XID_ERRORS"),
+                "detail": str(exc),
+            }
+        span = timedelta(seconds=window)
+        lo, hi = center - span, center + span
+        hits = [
+            (t, gpu, code)
+            for (t, gpu, code) in stream_xid_onset_records(xid_path)
+            if lo <= t <= hi
+        ]
+        gpus = sorted({gpu for _, gpu, _ in hits})
+        codes = sorted({_xid_code(code) for _, _, code in hits})
+        return {
+            "source": "xid",
+            "available": True,
+            "artifact": xid_path,
+            "window": [_bound(lo), _bound(hi)],
+            "count": len(hits),
+            "gpus": gpus,
+            "observed_xid": codes[0] if len(codes) == 1 else (codes or None),
+        }
+    raise ValueError(f"unknown source: {source!r} (expected 'jobs' or 'xid')")
 
 
 def check_degradation_trend(fail_time, lookback_hours: int = 4):
     """Examine telemetry in the hours BEFORE the fault to detect gradual degradation.
-    A high power_spike_ratio (>1.5) or temp_rise_C (>10) indicates pre-failure stress."""
+    A high power_spike_ratio (>1.5) or temp_rise_C (>10) indicates pre-failure stress.
+    Reads the canonical kalos POWER_USAGE/GPU_TEMP sources; degrades gracefully when
+    the raw data is not materialized (signals computed only from available metrics)."""
     center = parse_time_value(fail_time)
     if isinstance(center, datetime):
         start = center - timedelta(hours=lookback_hours)
@@ -56,10 +146,12 @@ def check_degradation_trend(fail_time, lookback_hours: int = 4):
     else:
         start = center - lookback_hours * 3600
         end = center
-    power = window_stats(POWER_CSV, start, end)
-    temp  = window_stats(TEMP_CSV,  start, end)
-    spike = round(power["max"] / power["mean"], 2) if power.get("mean", 0) > 0 else 0.0
-    rise  = round(temp["max"]  - temp["min"],   1) if temp.get("samples", 0) > 0 else 0.0
+    power = _metric_stats("POWER_USAGE", start, end)
+    temp  = _metric_stats("GPU_TEMP", start, end)
+    spike = (round(power["max"] / power["mean"], 2)
+             if power.get("available") and power.get("mean", 0) > 0 else 0.0)
+    rise  = (round(temp["max"] - temp["min"], 1)
+             if temp.get("available") and temp.get("samples", 0) > 0 else 0.0)
     return {
         "lookback_hours": lookback_hours,
         "power": power,
