@@ -64,5 +64,3 @@ export type AgentEvent =
       action: string;
       ticket: string | null;
     };
-
-export type AgentRuns = Record<string, AgentEvent[]>;

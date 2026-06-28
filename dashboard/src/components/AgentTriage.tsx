@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent } from "../types";
+import type { AgentEvent, Incident } from "../types";
 
 export function AgentTriage({
   incidentId,
   incidentData,
 }: {
   incidentId: string | null;
-  incidentData: any | null;
+  incidentData: Incident | null;
 }) {
   const [shown, setShown] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(false);

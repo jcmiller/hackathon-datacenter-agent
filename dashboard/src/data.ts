@@ -2,7 +2,6 @@
 // real AcmeTrace Kalos telemetry). Swapping to the live backend later = point
 // these fetches at /api/* — the shapes are identical (see types.ts).
 import type {
-  AgentRuns,
   Fleet,
   Incident,
   Meta,
@@ -20,6 +19,5 @@ async function getJSON<T>(path: string): Promise<T> {
 export const loadIncidents = () => getJSON<Incident[]>(`${base}/incidents.json`);
 export const loadFleet = () => getJSON<Fleet>(`${base}/fleet.json`);
 export const loadMeta = () => getJSON<Meta>(`${base}/meta.json`);
-export const loadAgentRuns = () => getJSON<AgentRuns>(`${base}/agentRuns.json`);
 export const loadTelemetry = (incidentId: string) =>
   getJSON<TelemetryWindow>(`${base}/telemetry/${incidentId}.json`);
