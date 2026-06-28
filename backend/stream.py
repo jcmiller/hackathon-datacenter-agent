@@ -1,6 +1,6 @@
 import pandas as pd
+from backend.dataset import FAIL_STATES
 
-FAIL_STATES = {"NODE_FAIL", "FAILED"}
 HISTORY = []
 
 def reset_history():
@@ -16,9 +16,15 @@ def warm_start(path, n_incidents):
         if r["state"] in FAIL_STATES:
             count += 1
             if count == n_incidents:
-                return records[: i + 1]
+                prefix = records[: i + 1]
+                HISTORY.clear()
+                HISTORY.extend(prefix)
+                return prefix
+    HISTORY.clear()
+    HISTORY.extend(records)
     return records
 
 def stream_jobs(path, start_index):
     for r in _load(path)[start_index:]:
+        HISTORY.append(r)
         yield r

@@ -1,4 +1,5 @@
 import pandas as pd
+from backend import stream
 from backend.stream import warm_start, stream_jobs
 
 def _write(tmp_path):
@@ -18,3 +19,25 @@ def test_stream_jobs_from_index(tmp_path):
     p, rows = _write(tmp_path)
     out = list(stream_jobs(p, 3))
     assert [r["job_id"] for r in out] == [3, 4]
+
+# --- HISTORY population tests ---
+
+def test_warm_start_populates_history(tmp_path):
+    stream.reset_history()
+    p, rows = _write(tmp_path)
+    prefix = warm_start(p, 1)
+    assert stream.HISTORY == prefix
+
+def test_stream_jobs_appends_to_history(tmp_path):
+    stream.reset_history()
+    p, rows = _write(tmp_path)
+    yielded = list(stream_jobs(p, 3))
+    assert stream.HISTORY == yielded
+
+def test_reset_history_clears(tmp_path):
+    stream.reset_history()
+    p, rows = _write(tmp_path)
+    warm_start(p, 1)
+    assert len(stream.HISTORY) > 0
+    stream.reset_history()
+    assert stream.HISTORY == []
