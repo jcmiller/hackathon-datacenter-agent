@@ -45,7 +45,12 @@ export function IncidentFeed({
                 {inc.gpu.node}-{inc.gpu.idx}
               </span>
               <span className="mono-num">{fmtTs(inc.ts)}</span>
-              <span className="mono-num">+{inc.correlatedCount} corr</span>
+              <span
+                className="mono-num"
+                title={`GPU impact count — ${inc.correlatedCount} other GPUs across the fleet failed in the same time window as this fault (i.e. correlated with it). A high count means a shared, cluster-wide cause (network / power / cooling / a bad job) rather than an isolated GPU fault.`}
+              >
+                {inc.correlatedCount} GPUs impacted
+              </span>
             </div>
           </div>
         ))}
