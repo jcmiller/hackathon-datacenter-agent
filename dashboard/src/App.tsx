@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   AgentRuns,
   Fleet,
   Incident,
   Meta,
   TelemetryWindow,
+  Point,
 } from "./types";
 import {
   loadAgentRuns,
@@ -24,6 +25,7 @@ export function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [runs, setRuns] = useState<AgentRuns>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedGpuId, setSelectedGpuId] = useState<string | null>(null);
   const [tele, setTele] = useState<TelemetryWindow | null>(null);
 
   // Collapsible panels state
@@ -62,6 +64,7 @@ export function App() {
         // Auto-select the first incident that arrives so the agent thinking animation triggers
         if (prev.length === 0) {
           setSelectedId(incident.id);
+          setSelectedGpuId(`${incident.gpu.node}-${incident.gpu.idx}`);
         }
         return next;
       });
@@ -99,16 +102,41 @@ export function App() {
     loadTelemetry(selectedId).then(setTele).catch(() => setTele(null));
   }, [selectedId]);
 
-  const selected = useMemo(
-    () => incidents.find((i) => i.id === selectedId) ?? null,
-    [incidents, selectedId],
-  );
-  const selectedGpu = selected ? `${selected.gpu.node}-${selected.gpu.idx}` : null;
-
-  // clicking a heatmap cell selects its incident if one exists for that GPU
+  // clicking a heatmap cell selects its incident if one exists for that GPU,
+  // or generates clean telemetry if it is healthy/idle.
   const selectGpu = (gid: string) => {
+    setSelectedGpuId(gid);
     const match = incidents.find((i) => `${i.gpu.node}-${i.gpu.idx}` === gid);
-    if (match) setSelectedId(match.id);
+    if (match) {
+      setSelectedId(match.id);
+    } else {
+      setSelectedId(null);
+      // Generate realistic telemetry metrics dynamically for this healthy/idle GPU!
+      const cell = fleet?.cells.find((c) => `${c.node}-${c.idx}` === gid);
+      const isIdle = cell?.status === "idle";
+      
+      const now = new Date();
+      const series = { temp: [] as Point[], power: [] as Point[], util: [] as Point[] };
+      // Generate 20 points of history
+      for (let i = 0; i < 20; i++) {
+        const timeStr = new Date(now.getTime() - (20 - i) * 10000).toISOString();
+        const rand = Math.random();
+        
+        const u = isIdle ? 0 : Math.round(75 + rand * 20);
+        const t = isIdle ? Math.round(32 + rand * 3) : Math.round(62 + rand * 12);
+        const p = isIdle ? Math.round(68 + rand * 8) : Math.round(240 + rand * 80);
+        
+        series.util.push([timeStr, u]);
+        series.temp.push([timeStr, t]);
+        series.power.push([timeStr, p]);
+      }
+      
+      setTele({
+        gpu: gid,
+        centerTs: now.toISOString(),
+        series
+      });
+    }
   };
 
   // Calculate dynamic grid template columns based on collapsed states
@@ -132,13 +160,19 @@ export function App() {
           <IncidentFeed
             incidents={incidents}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              const match = incidents.find((i) => i.id === id);
+              if (match) {
+                setSelectedGpuId(`${match.gpu.node}-${match.gpu.idx}`);
+              }
+            }}
           />
         )}
         <div className="center">
           <FleetHeatmap
             fleet={fleet}
-            selectedGpu={selectedGpu}
+            selectedGpu={selectedGpuId}
             onSelectGpu={selectGpu}
           />
           <TelemetryStrip tele={tele} />
