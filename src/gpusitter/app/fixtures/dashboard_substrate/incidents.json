@@ -1,0 +1,211 @@
+[
+  {
+    "correlated": [
+      "172.31.0.102-1",
+      "172.31.0.102-2",
+      "172.31.0.104-6",
+      "172.31.0.104-7",
+      "172.31.0.122-2",
+      "172.31.0.122-7",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 1,
+      "node": "172.31.0.102"
+    },
+    "hero": true,
+    "id": "INC-001",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:15+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.102-2",
+      "172.31.0.102-1",
+      "172.31.0.104-6",
+      "172.31.0.104-7",
+      "172.31.0.122-2",
+      "172.31.0.122-7",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 2,
+      "node": "172.31.0.102"
+    },
+    "hero": false,
+    "id": "INC-002",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:15+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.104-6",
+      "172.31.0.102-1",
+      "172.31.0.102-2",
+      "172.31.0.104-7",
+      "172.31.0.122-2",
+      "172.31.0.122-7",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 6,
+      "node": "172.31.0.104"
+    },
+    "hero": false,
+    "id": "INC-003",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:30+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.104-7",
+      "172.31.0.102-1",
+      "172.31.0.102-2",
+      "172.31.0.104-6",
+      "172.31.0.122-2",
+      "172.31.0.122-7",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 7,
+      "node": "172.31.0.104"
+    },
+    "hero": false,
+    "id": "INC-004",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:30+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.122-2",
+      "172.31.0.102-1",
+      "172.31.0.102-2",
+      "172.31.0.104-6",
+      "172.31.0.104-7",
+      "172.31.0.122-7",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 2,
+      "node": "172.31.0.122"
+    },
+    "hero": false,
+    "id": "INC-005",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:30+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.122-7",
+      "172.31.0.102-1",
+      "172.31.0.102-2",
+      "172.31.0.104-6",
+      "172.31.0.104-7",
+      "172.31.0.122-2",
+      "172.31.0.135-3",
+      "172.31.0.163-6"
+    ],
+    "correlatedCount": 116,
+    "gpu": {
+      "idx": 7,
+      "node": "172.31.0.122"
+    },
+    "hero": false,
+    "id": "INC-006",
+    "nodeCofaults": 1,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-17T06:00:30+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.0.123-1",
+      "172.31.0.123-4",
+      "172.31.0.123-7",
+      "172.31.0.163-2",
+      "172.31.0.163-3",
+      "172.31.13.45-1"
+    ],
+    "correlatedCount": 6,
+    "gpu": {
+      "idx": 1,
+      "node": "172.31.0.123"
+    },
+    "hero": false,
+    "id": "INC-007",
+    "nodeCofaults": 2,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-15T20:40:15+08:00",
+    "xid": 43,
+    "xidLabel": "GPU stopped processing"
+  },
+  {
+    "correlated": [
+      "172.31.15.26-2"
+    ],
+    "correlatedCount": 1,
+    "gpu": {
+      "idx": 2,
+      "node": "172.31.15.26"
+    },
+    "hero": false,
+    "id": "INC-008",
+    "nodeCofaults": 0,
+    "severity": "crit",
+    "state": "triaging",
+    "ts": "2023-08-18T17:23:15+08:00",
+    "xid": 31,
+    "xidLabel": "GPU memory page fault"
+  },
+  {
+    "correlated": [
+      "172.31.15.203-3"
+    ],
+    "correlatedCount": 1,
+    "gpu": {
+      "idx": 3,
+      "node": "172.31.15.203"
+    },
+    "hero": false,
+    "id": "INC-009",
+    "nodeCofaults": 0,
+    "severity": "warn",
+    "state": "triaging",
+    "ts": "2023-08-28T08:42:45+08:00",
+    "xid": 94,
+    "xidLabel": "Contained ECC error"
+  }
+]
