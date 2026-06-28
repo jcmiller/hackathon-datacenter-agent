@@ -5,11 +5,22 @@
  .card{border:1px solid #ddd;border-radius:8px;padding:10px;margin:8px 0;cursor:pointer}
  .fail{border-left:4px solid #e03}.trace{white-space:pre-wrap;background:#f6f6f6;padding:12px;border-radius:8px}
  h2{margin:0 0 8px}
+ #model{border:1px solid #ddd;border-radius:8px;padding:10px;margin:0 0 12px;background:#f0f7ff}
+ #model b{font-variant-numeric:tabular-nums}
 </style>
 <div class="col" id="feed"><h2>Incident feed</h2></div>
-<div class="col"><h2>Agent triage</h2><div id="trace" class="trace">Click an incident…</div></div>
+<div class="col"><h2>Live predictor</h2>
+ <div id="model">No model yet — waiting for first incident…</div>
+ <h2>Agent triage</h2><div id="trace" class="trace">Click an incident…</div></div>
 <script>
- const feed=document.getElementById('feed'), trace=document.getElementById('trace');
+ const feed=document.getElementById('feed'), trace=document.getElementById('trace'), model=document.getElementById('model');
+ async function refreshModel(){
+   const m=await (await fetch('/model')).json();
+   model.innerHTML = m.version
+     ? `<b>v${m.version}</b> · ${m.model_type} · ROC-AUC <b>${m.auc.toFixed(3)}</b><br><small>${(m.features||[]).join(', ')}</small>`
+     : 'No model yet — waiting for first incident…';
+ }
+ refreshModel(); setInterval(refreshModel, 3000);
  new EventSource('/incidents').onmessage=e=>{
    const inc=JSON.parse(e.data), c=document.createElement('div');
    c.className='card fail';
