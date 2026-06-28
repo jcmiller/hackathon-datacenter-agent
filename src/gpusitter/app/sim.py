@@ -112,16 +112,56 @@ async def do_triage(incident: dict):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-def _registry_model_card(card) -> dict:
+def _resolve_monitor_registry():
+    """Resolve the one registry that BOTH ``/api/model`` and ``/api/monitor`` serve.
+
+    Model identity must agree across the two surfaces (bead aow). The only way to
+    guarantee that off-droplet is to resolve the artifact ONCE, here, with the exact
+    same precedence both endpoints honor:
+
+    1. **Real droplet artifacts win** — a persisted incumbent at
+       ``MONITOR_REGISTRY_PATH`` *and* the feature table at ``MONITOR_DATA_PATH``
+       (``fixture=False``). Both are required: the monitor needs the table to score,
+       and demanding it here keeps the model card and the per-row scores on the same
+       registry.
+    2. **Committed honest demo fixture** (bead jds) — when the real artifacts are
+       absent (off the droplet, no ~80 GB trace) but the committed fixture table
+       exists, serve the fixture-backed registry (``fixture=True`` +
+       ``fixture_note``).
+    3. **Nothing honest to serve** — returns ``None``.
+
+    Returns ``(registry, data_path, is_fixture, fixture_note)`` or ``None``.
+    """
+    import os
+
+    from ..detection.harness import ModelRegistry
+
+    registry = ModelRegistry(MONITOR_REGISTRY_PATH)
+    if registry.incumbent is not None and os.path.exists(MONITOR_DATA_PATH):
+        return registry, MONITOR_DATA_PATH, False, None
+    if os.path.exists(MONITOR_FIXTURE_DATA_PATH):
+        from .monitor_fixture import FIXTURE_NOTE, load_fixture_registry
+
+        fixture_reg = load_fixture_registry(
+            MONITOR_FIXTURE_DATA_PATH, MONITOR_FIXTURE_REGISTRY_PATH
+        )
+        return fixture_reg, MONITOR_FIXTURE_DATA_PATH, True, FIXTURE_NOTE
+    return None
+
+
+def _registry_model_card(
+    card, *, is_fixture: bool = False, fixture_note: str | None = None
+) -> dict:
     """Render a rigorous registry ModelCard as the canonical dashboard model card.
 
     This is the SAME incumbent ``/api/monitor`` scores from, so the headline metric
     here (held-out ROC-AUC behind the strict time-split + permutation baseline + dual
     leakage probes + holdout-identity pin) and the per-row operational scores there are
-    one model, not two contradictory stories (bead aow).
+    one model, not two contradictory stories (bead aow). ``fixture`` mirrors the
+    ``/api/monitor`` flag so a fixture-backed card is badged illustrative the same way.
     """
     primary_is_auc = card.primary_metric == "roc_auc"
-    return {
+    out = {
         "model": {
             "version": card.version,
             "model_type": card.model_type,
@@ -139,7 +179,11 @@ def _registry_model_card(card) -> dict:
         },
         "source": "registry",
         "rigorous": True,
+        "fixture": is_fixture,
     }
+    if is_fixture:
+        out["fixture_note"] = fixture_note
+    return out
 
 
 def _provisional_model_card(model: dict) -> dict:
@@ -174,17 +218,22 @@ def get_model():
     scores (bead aow). The legacy in-process ``classifier`` path is a provisional
     fallback, explicitly badged.
 
+    Off-droplet the canonical incumbent is the committed demo fixture (bead jds),
+    resolved by :func:`_resolve_monitor_registry` — the SAME resolver ``/api/monitor``
+    uses — so both surfaces serve one fixture-backed model (model.version ==
+    monitor.model_version), badged ``fixture=true``.
+
     Model-type menu divergence is intentional: the live triage ``classifier`` offers
     logreg/tree/gboost for fast in-process fits, while the rigorous harness offers
     logreg/hgb deliberately matched to the lys offline eval models so harness AUC
     equals the standalone eval report. The canonical headline menu is logreg/hgb.
     """
-    # lazy import: avoids pulling pandas/sklearn-heavy harness at module load time
-    from ..detection.harness import ModelRegistry
-
-    registry = ModelRegistry(MONITOR_REGISTRY_PATH)
-    if registry.incumbent is not None:
-        return _registry_model_card(registry.incumbent)
+    resolved = _resolve_monitor_registry()
+    if resolved is not None:
+        registry, _data_path, is_fixture, fixture_note = resolved
+        return _registry_model_card(
+            registry.incumbent, is_fixture=is_fixture, fixture_note=fixture_note
+        )
 
     m = classifier.INCUMBENT
     if m is not None:
@@ -221,38 +270,22 @@ def get_monitor(budget: float | None = None, horizon: float | None = None):
 
     Optional ``budget`` / ``horizon`` query params narrow the budget/horizon grid.
     """
-    import os
-
     from ..detection import monitor
     from ..detection.harness import ModelRegistry, load_dataset
 
-    df = None
-    scorer = None
-    is_fixture = False
-    fixture_note = None
-
-    registry = ModelRegistry(MONITOR_REGISTRY_PATH)
-    if registry.incumbent is not None and os.path.exists(MONITOR_DATA_PATH):
-        df = load_dataset(MONITOR_DATA_PATH)
-        scorer = monitor.RowScorer.from_registry(registry)
-    elif os.path.exists(MONITOR_FIXTURE_DATA_PATH):
-        # Committed honest demo fixture: portable render without the droplet.
-        from .monitor_fixture import FIXTURE_NOTE, load_fixture_registry
-
-        fixture_reg = load_fixture_registry(
-            MONITOR_FIXTURE_DATA_PATH, MONITOR_FIXTURE_REGISTRY_PATH
-        )
-        df = load_dataset(MONITOR_FIXTURE_DATA_PATH)
-        scorer = monitor.RowScorer.from_registry(fixture_reg)
-        is_fixture = True
-        fixture_note = FIXTURE_NOTE
-
-    if scorer is None:
+    # Shared resolver (bead aow): the same registry /api/model serves, so the model
+    # card and these per-row scores are always one model — never a fixture-vs-real mix.
+    resolved = _resolve_monitor_registry()
+    if resolved is None:
         return {
             "available": False,
             "reason": "no monitor data/registry and no committed demo fixture",
-            "incumbent": registry.describe_incumbent(),
+            "incumbent": ModelRegistry(MONITOR_REGISTRY_PATH).describe_incumbent(),
         }
+
+    registry, data_path, is_fixture, fixture_note = resolved
+    df = load_dataset(data_path)
+    scorer = monitor.RowScorer.from_registry(registry)
 
     budgets = (budget,) if budget else monitor.DEFAULT_BUDGETS
     horizons = (horizon,) if horizon else monitor.DEFAULT_HORIZONS_S

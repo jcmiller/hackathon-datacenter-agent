@@ -203,9 +203,11 @@ def test_triage_stream_yields_events(monkeypatch):
 
 
 def test_model_endpoint_provisional_fallback(tmp_path, monkeypatch):
-    """With no rigorous registry, the in-process triage fit surfaces — but badged
-    provisional so it cannot be mistaken for the keep-if-better incumbent (AC#2/#4)."""
+    """With no rigorous registry AND no committed fixture, the in-process triage fit
+    surfaces — but badged provisional so it cannot be mistaken for the incumbent."""
     monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(tmp_path / "empty_reg"))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(tmp_path / "no_data.parquet"))
+    monkeypatch.setattr(sim, "MONITOR_FIXTURE_DATA_PATH", str(tmp_path / "no_fixture.csv"))
     clf.reset()
     clf.maybe_promote(None, "logreg", ["power_spike_ratio"], 0.87, n_samples=5)
     r = client.get("/api/model")
@@ -255,6 +257,39 @@ def test_model_endpoint_serves_registry_incumbent(tmp_path, monkeypatch):
     mon = client.get("/api/monitor").json()
     assert mon["available"] is True
     assert card["version"] == mon["model_version"]
+    clf.reset()
+
+
+def test_model_monitor_fixture_parity_off_droplet(tmp_path, monkeypatch):
+    """Off-droplet (no real registry, no real feature table), /api/model and
+    /api/monitor must serve the SAME committed fixture-backed model (bead aow + jds).
+
+    Regression for the rejection: previously /api/monitor showed the fixture model
+    while /api/model returned model=null because it ignored jds's fixture resolver.
+    Uses the committed fixture only — no droplet artifacts."""
+    # Force "off the droplet": the real artifacts are absent.
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(tmp_path / "no_registry"))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(tmp_path / "no_data.parquet"))
+    # MONITOR_FIXTURE_* keep their committed defaults — the portable demo artifact.
+    clf.reset()
+    # Even a stale in-process fit must not shadow the fixture-backed registry.
+    clf.maybe_promote(None, "tree", ["power_spike_ratio"], 0.99, n_samples=5)
+
+    model = client.get("/api/model").json()
+    monitor = client.get("/api/monitor").json()
+
+    # Both are the committed fixture, both badged illustrative.
+    assert model["source"] == "registry"
+    assert model["rigorous"] is True
+    assert model["fixture"] is True
+    assert "fixture_note" in model
+    assert monitor["available"] is True
+    assert monitor["fixture"] is True
+
+    # Parity: one model on both surfaces — not a fixture-vs-null (or fixture-vs-real) mix.
+    assert model["model"] is not None
+    assert model["model"]["version"] == monitor["model_version"]
+    assert model["model"]["model_type"] == "logreg"  # the fixture incumbent, not the tree fit
     clf.reset()
 
 

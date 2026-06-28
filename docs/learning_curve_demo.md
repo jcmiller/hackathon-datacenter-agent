@@ -81,11 +81,15 @@ The demo must show a single, honest self-improvement story. There are two model
 codepaths and they are deliberately reconciled, not merged:
 
 - **Rigorous (canonical).** `gpusitter.detection.harness.ModelRegistry` — the
-  keep-if-better incumbent behind every guard above. `/api/model` serves this
-  incumbent's card whenever a registry exists, and it is the **same** model
-  `/api/monitor` scores per-row. Card and operational scores agree because they are
-  one model; `/api/model` reports `source="registry"`, `rigorous=true`, and a
-  `version` equal to `/api/monitor`'s `model_version`.
+  keep-if-better incumbent behind every guard above. `/api/model` and `/api/monitor`
+  resolve the registry through one shared resolver (`sim._resolve_monitor_registry`),
+  so they always serve the **same** model: card and per-row scores agree because they
+  are one incumbent. `/api/model` reports `source="registry"`, `rigorous=true`, and a
+  `version` equal to `/api/monitor`'s `model_version`. Off the droplet (no real
+  `models/early_detection` registry or `data/early_detection.parquet`) the resolver
+  falls back to the committed honest demo fixture (bead jds), so **both** surfaces
+  serve the same fixture-backed model, badged `fixture=true` + `fixture_note` — never
+  a fixture-vs-null or fixture-vs-real mismatch.
 - **Provisional (fallback only).** `gpusitter.detection.classifier` is the live triage
   agent's fast in-process fit (`maybe_promote` on `val_auc > incumbent` alone — no
   leakage probe, no holdout-identity guard, no time-split). `/api/model` returns it
