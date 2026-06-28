@@ -70,9 +70,7 @@ def iter_long_records(
         # filter keeps only a slice of the fleet. Index is offset by 1 because
         # column 0 is Time, so kept[i] = (row index, GpuId).
         kept: list[tuple[int, GpuId]] = [
-            (i + 1, gpu)
-            for i, gpu in enumerate(col_gpus)
-            if keep is None or gpu.canonical in keep
+            (i + 1, gpu) for i, gpu in enumerate(col_gpus) if keep is None or gpu.canonical in keep
         ]
 
         for row in reader:

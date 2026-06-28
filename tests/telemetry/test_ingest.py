@@ -175,9 +175,7 @@ def test_kept_columns_resolved_once_not_per_row(tmp_path, monkeypatch):
     monkeypatch.setattr(ingest_mod, "parse_gpu_id", counting_parse)
 
     p = tmp_path / "GPU_TEMP.csv"
-    rows = "".join(
-        f"2023-08-15 00:00:{i:02d}+08:00,1.0,2.0,3.0\n" for i in range(60)
-    )
+    rows = "".join(f"2023-08-15 00:00:{i:02d}+08:00,1.0,2.0,3.0\n" for i in range(60))
     p.write_text("Time,172.31.0.5-3,172.31.0.5-4,172.31.0.9-0\n" + rows)
 
     list(iter_long_records(str(p), "GPU_TEMP", gpus={"172.31.0.5#3"}))
