@@ -75,7 +75,7 @@ scripts/download_datasets.sh --list # show targets
 ## Status
 
 - ✅ Reactive RCA agent (loader, memory, priors, tools, ADK agent, SSE sim + dashboard) — built, tested.
-- 🚧 Self-improving predictor loop (`dataset`, `classifier`, `stream`, `train_and_validate`, `/model`) — in progress.
+- ✅ Self-improving predictor loop (`stream`, `dataset`, `classifier`, `train_and_validate`, `/model` + dashboard model card) — built, tested (31 passing); offline `precompute_features.py` for real AcmeTrace.
 - ⏭️ Stretch: Xid-event-driven incidents, Managed-Agents actuation spin-off, MCP tool exposure, real frontend.
 
 `scraps/` holds the earlier iteration. `docs/superpowers/` (local only) holds the design spec + implementation plan.
