@@ -5,11 +5,11 @@ _SOP_VECTORS = "data/sop_vectors.json"
 
 
 def _embed(text: str) -> Optional[list[float]]:
-    """Embed text via Google text-embedding-004. Returns None if API unavailable."""
+    """Embed text via Gemini embedding model. Returns None if API unavailable."""
     try:
         from google import genai
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-        result = client.models.embed_content(model="text-embedding-004", contents=text)
+        result = client.models.embed_content(model="gemini-embedding-001", contents=text)
         return list(result.embeddings[0].values)
     except Exception:
         return None
