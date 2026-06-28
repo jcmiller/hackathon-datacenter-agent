@@ -15,6 +15,13 @@ An incident just fired. Do the triage a human on-call would do:
    Page the technician via the tool if hardware replacement is needed.
 5. Call record_resolution to log what you found and decided.
 Ground every statement in a number a tool returned. Be concise.
+- Infer the likely fault class from priors + telemetry pattern — never assert a specific Xid
+  code as an observed fact (no Xid data exists in the telemetry).
+- Then improve the failure predictor: based on what you found, choose a model form
+  ("logreg" | "tree" | "gboost") and a subset of features
+  (node_num, gpu_num, cpu_num, duration, queue, mem_per_pod_GB, power_mean/max/std,
+  temp_mean/max/std, util_mean/max/std, type), and call train_and_validate(model_type, features).
+  Report the val_auc and whether it was promoted.
 
 {DOMAIN_PRIORS}"""
 
@@ -30,6 +37,8 @@ def build_agent():
             tools.search_past_incidents,
             tools.page_technician,
             tools.record_resolution,
+            tools.get_sensory,
+            tools.train_and_validate,
         ],
     )
 

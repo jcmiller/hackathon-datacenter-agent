@@ -1,7 +1,8 @@
 """Tests for backend/sim.py — run offline, no API key needed."""
-import csv, pathlib, textwrap
-import pytest
+import csv, pathlib
 import backend.sim as sim
+import backend.stream as stream
+import backend.classifier as clf
 from fastapi.testclient import TestClient
 
 client = TestClient(sim.app)
@@ -10,28 +11,16 @@ client = TestClient(sim.app)
 # Helpers
 # ---------------------------------------------------------------------------
 
-CSV_COLUMNS = [
-    "job_id","user","node_num","gpu_num","cpu_num","type","state",
-    "submit_time","start_time","end_time","duration","queue",
-    "gpu_time","fail_time","stop_time",
-]
-
-def _write_sample_csv(tmp_path: pathlib.Path) -> pathlib.Path:
-    p = tmp_path / "sample.csv"
+def _write_jobs_csv(tmp_path: pathlib.Path) -> pathlib.Path:
+    """3 rows: a warm-start failure, a completed job, then a streamed failure."""
+    p = tmp_path / "jobs.csv"
     rows = [
-        # NODE_FAIL row — should appear in SSE stream
-        dict(job_id="JOB001", user="alice", node_num=4, gpu_num=8, cpu_num=32,
-             type="GPU_TRAIN", state="NODE_FAIL", submit_time=1000, start_time=1010,
-             end_time=1100, duration=90, queue="gpu", gpu_time=720,
-             fail_time=1050.0, stop_time=1100),
-        # COMPLETED row — filtered out by load_incidents
-        dict(job_id="JOB002", user="bob", node_num=2, gpu_num=4, cpu_num=16,
-             type="GPU_TRAIN", state="COMPLETED", submit_time=2000, start_time=2010,
-             end_time=2200, duration=190, queue="gpu", gpu_time=760,
-             fail_time="", stop_time=2200),
+        {"job_id": "WARM01", "type": "pretrain", "node_num": 4, "state": "NODE_FAIL"},
+        {"job_id": "JOB002", "type": "pretrain", "node_num": 2, "state": "COMPLETED"},
+        {"job_id": "JOB001", "type": "pretrain", "node_num": 4, "state": "NODE_FAIL"},
     ]
     with open(p, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
     return p
@@ -48,11 +37,12 @@ def test_index_returns_html():
 
 
 def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
-    csv_path = _write_sample_csv(tmp_path)
-    monkeypatch.setattr(sim, "TRACE_CSV", str(csv_path))
+    csv_path = _write_jobs_csv(tmp_path)
+    monkeypatch.setattr(sim, "JOBS_CSV", str(csv_path))
+    monkeypatch.setattr(sim, "WARM_START_INCIDENTS", 1)  # warm-start consumes WARM01 only
     monkeypatch.setattr(sim, "STEP_SECONDS", 0)
-    # clear any cached incidents so the monkeypatched path is used
-    sim._incidents_cache.clear()
+    sim._started["done"] = False
+    stream.reset_history()
 
     with client.stream("GET", "/incidents") as resp:
         body = ""
@@ -62,8 +52,11 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
                 break
 
     assert "data:" in body
-    assert "JOB001" in body
-    assert "JOB002" not in body   # COMPLETED row must be filtered
+    assert "JOB001" in body          # streamed failure emitted
+    assert "JOB002" not in body      # COMPLETED row filtered
+    assert "WARM01" not in body      # warm-start failure is history, not streamed
+    # HISTORY = 1 warm-start + 2 streamed rows; guards against double-population
+    assert len(stream.HISTORY) == 3
 
 
 def test_triage_endpoint_wiring(monkeypatch):
@@ -71,3 +64,17 @@ def test_triage_endpoint_wiring(monkeypatch):
     r = client.post("/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
     assert r.status_code == 200
     assert r.json()["disposition"] == "restart-and-watch"
+
+
+def test_model_endpoint_reflects_incumbent():
+    clf.reset()
+    clf.maybe_promote(None, "gboost", ["power_max"], 0.91)
+    r = client.get("/model")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["version"] == 1 and body["model_type"] == "gboost" and body["auc"] == 0.91
+
+
+def test_model_endpoint_empty_when_no_model():
+    clf.reset()
+    assert client.get("/model").json()["version"] == 0

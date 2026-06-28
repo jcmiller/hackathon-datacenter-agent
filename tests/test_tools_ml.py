@@ -44,3 +44,9 @@ def test_train_and_validate_not_promoted():
     assert out["trained"] is True
     assert out["promoted"] is False
     assert out["version"] == 1  # incumbent version unchanged — no churn
+
+
+def test_train_and_validate_unknown_feature():
+    _seed_history()
+    out = tools.train_and_validate("logreg", ["does_not_exist"])
+    assert out == {"trained": False, "reason": "unknown feature"}
