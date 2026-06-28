@@ -47,10 +47,13 @@ Ground every claim in a tool return value. Note if this onset matches a known pa
 {DOMAIN_PRIORS}"""
 
 
+TRIAGE_MODEL = "gemini-2.5-flash"
+
+
 def build_agent():
     return Agent(
         name="oncall_rca",
-        model="gemini-2.5-flash",
+        model=TRIAGE_MODEL,
         instruction=INSTRUCTION,
         tools=[
             tools.get_telemetry,
@@ -80,7 +83,7 @@ def triage_stream(incident: dict) -> Generator[dict]:
     all_obs_text = ""
 
     inc_id = incident.get("id", "?")
-    _log.info("triage start  incident=%s model=gemini-2.5-flash", inc_id)
+    _log.info("triage start  incident=%s model=%s", inc_id, TRIAGE_MODEL)
     for ev in runner.run(user_id="demo", session_id=session.id, new_message=msg):
         for tc in ev.get_function_calls():
             _log.info("triage tool   incident=%s tool=%s", inc_id, tc.name)
