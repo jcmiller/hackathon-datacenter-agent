@@ -24,8 +24,20 @@ Three-pane mission control over a top KPI bar:
 
 ## Data
 
-All panels read **AcmeTrace Kalos telemetry** (Shanghai AI Lab, Aug 2023) as
-static fixtures in `public/fixtures/`, framed around the **Aug-17 06:00
+In normal operation every panel reads the **live FastAPI `/api/*` endpoints**
+(`src/gpusitter/app/sim.py`, bead h7w): the incident SSE stream, `/api/fleet`,
+`/api/meta`, `/api/telemetry`, `/api/model`, `/api/monitor`, and
+`/api/learning-curve`. The backend serves the **real, derived Kalos substrate**
+first (edge-detected Aug-17 06:00 Xid onsets) and falls back to a committed,
+*explicitly badged* demo fixture only when the substrate is absent. The static
+`public/fixtures/` JSON is now used **only** as an offline fallback (a pure-static
+`vite preview` with no backend), surfaced in the UI as an `OFFLINE` badge. A
+`REAL / FIXTURE / OFFLINE / UNAVAILABLE` provenance badge in the top bar makes the
+active source unmistakable. Smoke-test the live wiring with `node verify.mjs`
+against a running backend.
+
+The underlying telemetry is **AcmeTrace Kalos telemetry** (Shanghai AI Lab, Aug
+2023), framed around the **Aug-17 06:00
 correlated Xid burst** — the verified hero event: **116 GPUs across 74 nodes
 fault within ~30 s**, Xid 43-dominant, scattered (≤4-of-8 per node), with no
 thermal/power precursor. See `../docs/incident-aug17-0600.md` (bead `6xk`) for
