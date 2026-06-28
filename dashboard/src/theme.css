@@ -1,0 +1,169 @@
+/* GPUSitter — "ops terminal" theme. Dark, warm, monospace, terracotta accent.
+   Inspired by the Claude Code CLI look: minimal chrome, hairline borders,
+   terminal-log typography. */
+
+:root {
+  --bg: #1a1714;
+  --bg-panel: #211d19;
+  --bg-elev: #272220;
+  --border: #352f28;
+  --border-soft: #2b2622;
+
+  --fg: #e8e2d6;
+  --fg-dim: #9a9286;
+  --fg-faint: #6c655c;
+
+  --accent: #d97757; /* Claude terracotta */
+  --accent-dim: #a85a40;
+
+  --ok: #7fa86b;
+  --warn: #d9a441;
+  --crit: #c45b4a;
+  --info: #6f97b8;
+
+  --mono: "JetBrains Mono", "IBM Plex Mono", "SF Mono", ui-monospace,
+    "Cascadia Code", Menlo, Consolas, monospace;
+
+  --r: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* faint grain/vignette for depth, very subtle */
+  background-image: radial-gradient(
+    ellipse at top,
+    rgba(217, 119, 87, 0.04),
+    transparent 60%
+  );
+}
+
+::selection {
+  background: rgba(217, 119, 87, 0.3);
+}
+
+/* scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.panel-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dim {
+  color: var(--fg-dim);
+}
+.faint {
+  color: var(--fg-faint);
+}
+.accent {
+  color: var(--accent);
+}
+.ok {
+  color: var(--ok);
+}
+.warn {
+  color: var(--warn);
+}
+.crit {
+  color: var(--crit);
+}
+
+.mono-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* blinking terminal cursor */
+.cursor::after {
+  content: "▋";
+  color: var(--accent);
+  animation: blink 1s steps(2, start) infinite;
+  margin-left: 2px;
+}
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* pulse for the active fault cell / hero */
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 91, 74, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(196, 91, 74, 0);
+  }
+}
+.pulse {
+  animation: pulse 1.6s ease-out infinite;
+}
+
+/* fade-in for streamed log lines */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fade-up {
+  animation: fadeUp 0.2s ease-out;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--fg);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
