@@ -1,0 +1,190 @@
+{
+  "primary_metric": "roc_auc",
+  "dataset": {
+    "source": "synthetic-weak-signal",
+    "synthetic": true,
+    "n_rows": 2400,
+    "n_features": 4,
+    "n_positive": 445,
+    "base_rate": 0.18541666666666667
+  },
+  "baseline_v0": {
+    "name": "no_skill_prior",
+    "roc_auc": 0.5,
+    "avg_precision": 0.20416666666666666,
+    "base_rate": 0.20416666666666666,
+    "n_train": 1680,
+    "n_test": 720
+  },
+  "curve": [
+    {
+      "version": "v0",
+      "label": "no-skill baseline",
+      "model_type": "no_skill_prior",
+      "n_features": 0,
+      "roc_auc": 0.5,
+      "signal_gap": 0.0,
+      "hypothesis": "Predict the training base rate for every GPU \u2014 the zero-skill floor.",
+      "reflection": "no learned signal; held-out ROC-AUC 0.500 by construction (base rate 0.204). Everything above this line is real skill."
+    },
+    {
+      "version": "v1",
+      "label": "hgb / 4 features",
+      "model_type": "hgb",
+      "n_features": 4,
+      "roc_auc": 0.6250905248661419,
+      "signal_gap": 0.1379,
+      "hypothesis": "Baseline: hgb over all 4 features to establish the incumbent.",
+      "reflection": "held-out AUC 0.625, gap +0.138 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v1. strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "version": "v2",
+      "label": "logreg / 4 features",
+      "model_type": "logreg",
+      "n_features": 4,
+      "roc_auc": 0.6823616008357968,
+      "signal_gap": 0.1855,
+      "hypothesis": "Baseline: logreg over all 4 features to establish the incumbent.",
+      "reflection": "held-out AUC 0.682, gap +0.185 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v2. strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "version": "v3",
+      "label": "logreg / 2 features",
+      "model_type": "logreg",
+      "n_features": 2,
+      "roc_auc": 0.6837743823532904,
+      "signal_gap": 0.1964,
+      "hypothesis": "High-signal subset (logreg): power_mean, temp_mean separate the held-out classes (univariate AUC power_mean=0.66, temp_mean=0.63); drop the rest as noise.",
+      "reflection": "held-out AUC 0.684, gap +0.196 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v3. strongest feature: power_mean (AUC 0.659)."
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "model_type": "hgb",
+      "n_features": 4,
+      "features": [
+        "temp_mean",
+        "power_mean",
+        "util_mean",
+        "mem_last"
+      ],
+      "roc_auc": 0.6250905248661419,
+      "signal_gap": 0.1379,
+      "leaks": false,
+      "promoted": true,
+      "version": 1,
+      "hypothesis": "Baseline: hgb over all 4 features to establish the incumbent.",
+      "reflection": "held-out AUC 0.625, gap +0.138 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v1. strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "round": 2,
+      "model_type": "logreg",
+      "n_features": 4,
+      "features": [
+        "temp_mean",
+        "power_mean",
+        "util_mean",
+        "mem_last"
+      ],
+      "roc_auc": 0.6823616008357968,
+      "signal_gap": 0.1855,
+      "leaks": false,
+      "promoted": true,
+      "version": 2,
+      "hypothesis": "Baseline: logreg over all 4 features to establish the incumbent.",
+      "reflection": "held-out AUC 0.682, gap +0.185 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v2. strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "round": 3,
+      "model_type": "logreg",
+      "n_features": 2,
+      "features": [
+        "power_mean",
+        "temp_mean"
+      ],
+      "roc_auc": 0.6837743823532904,
+      "signal_gap": 0.1964,
+      "leaks": false,
+      "promoted": true,
+      "version": 3,
+      "hypothesis": "High-signal subset (logreg): power_mean, temp_mean separate the held-out classes (univariate AUC power_mean=0.66, temp_mean=0.63); drop the rest as noise.",
+      "reflection": "held-out AUC 0.684, gap +0.196 over the no-signal baseline; real signal above the no-signal baseline. promoted -> v3. strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "round": 4,
+      "model_type": "hgb",
+      "n_features": 2,
+      "features": [
+        "power_mean",
+        "temp_mean"
+      ],
+      "roc_auc": 0.6059348695848322,
+      "signal_gap": 0.0981,
+      "leaks": false,
+      "promoted": false,
+      "version": 3,
+      "hypothesis": "High-signal subset (hgb): power_mean, temp_mean separate the held-out classes (univariate AUC power_mean=0.66, temp_mean=0.63); drop the rest as noise.",
+      "reflection": "held-out AUC 0.606, gap +0.098 over the no-signal baseline; real signal above the no-signal baseline. not promoted (0.6059 <= incumbent 0.6838). strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "round": 5,
+      "model_type": "logreg",
+      "n_features": 1,
+      "features": [
+        "power_mean"
+      ],
+      "roc_auc": 0.6585461409694767,
+      "signal_gap": 0.1982,
+      "leaks": false,
+      "promoted": false,
+      "version": 3,
+      "hypothesis": "Ablation (logreg): can power_mean alone (univariate AUC 0.66) carry the prediction?",
+      "reflection": "held-out AUC 0.659, gap +0.198 over the no-signal baseline; real signal above the no-signal baseline. not promoted (0.6585 <= incumbent 0.6838). strongest feature: power_mean (AUC 0.659)."
+    },
+    {
+      "round": 6,
+      "model_type": "hgb",
+      "n_features": 1,
+      "features": [
+        "power_mean"
+      ],
+      "roc_auc": 0.5520176657050255,
+      "signal_gap": 0.0554,
+      "leaks": false,
+      "promoted": false,
+      "version": 3,
+      "hypothesis": "Ablation (hgb): can power_mean alone (univariate AUC 0.66) carry the prediction?",
+      "reflection": "held-out AUC 0.552, gap +0.055 over the no-signal baseline; real signal above the no-signal baseline. not promoted (0.5520 <= incumbent 0.6838). strongest feature: power_mean (AUC 0.659)."
+    }
+  ],
+  "n_promotions": 3,
+  "final_incumbent": {
+    "version": 3,
+    "model_type": "logreg",
+    "roc_auc": 0.6837743823532904,
+    "n_features": 2,
+    "features": [
+      "power_mean",
+      "temp_mean"
+    ]
+  },
+  "honest_note": "Weak signal is expected on real Kalos telemetry (lys NO-GO verdict). The self-improving LOOP/mechanism is the deliverable, not a headline AUC. The synthetic table here is deliberately weak (~0.6-0.66) to mirror reality.",
+  "real_data_reference": {
+    "source": "docs/early_detection_eval.json",
+    "dataset": {
+      "data_path": "data/early_detection.csv",
+      "n_rows": 6978,
+      "n_features": 40,
+      "n_positive": 1965
+    },
+    "best_real": {
+      "model": "logreg",
+      "horizon": "300s",
+      "roc_auc": 0.6527293844367016,
+      "permuted_baseline": 0.5401537380035454
+    },
+    "best_hgb_roc_auc": 0.586527293844367,
+    "verdict": "Weak but real, leakage-free signal (held-out ROC-AUC ~0.65). Not a standalone reliable predictor (NO-GO); the dataset + self-improving harness are the reusable deliverable (GO)."
+  }
+}
