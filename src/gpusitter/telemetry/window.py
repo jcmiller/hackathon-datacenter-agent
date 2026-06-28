@@ -9,13 +9,21 @@ frame — so it scales to the real ~750 MB kalos files without materializing the
 
 import csv
 
+from .timeparse import parse_time_value
+
 
 def _empty():
     return {"samples": 0, "mean": 0.0, "max": 0.0, "min": 0.0}
 
 
 def window_stats(path: str, start, end) -> dict:
-    """Aggregate non-Time cells over rows whose numeric Time is in [start, end]."""
+    """Aggregate non-Time cells over rows whose Time is in [start, end].
+
+    Time may be relative-second floats OR ISO timestamps (real Kalos); ``start``/
+    ``end`` must be the same kind (use :func:`window_bounds`). A present-but-
+    unparseable Time raises — never silently skipped — so real-data windows can't
+    quietly return samples:0.
+    """
     if path.endswith(".pkl"):
         return _pickle_window_stats(path, start, end)
     rows = n = 0
@@ -28,22 +36,16 @@ def window_stats(path: str, start, end) -> dict:
         except StopIteration:
             return _empty()
         for row in reader:
-            if not row:
-                continue
-            try:
-                t = float(row[0])
-            except ValueError:
-                continue
+            if not row or (len(row) == 1 and row[0].strip() == ""):
+                continue  # genuinely blank line, not a data row
+            t = parse_time_value(row[0])  # raises on bad Time -> fail loud
             if not (start <= t <= end):
                 continue
             rows += 1
             for cell in row[1:]:
                 if cell == "":
-                    continue
-                try:
-                    v = float(cell)
-                except ValueError:
-                    continue
+                    continue  # idle/unallocated cell — sparse, expected
+                v = float(cell)
                 n += 1
                 total += v
                 mx = v if mx is None or v > mx else mx

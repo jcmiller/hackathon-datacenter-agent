@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
+from ..telemetry.timeparse import parse_time_value
+
 
 @dataclass
 class FailedJob:
@@ -71,13 +73,10 @@ def load_incidents(trace_csv: str) -> List[dict]:
                 continue
             ft = (row.get("fail_time") or "").strip()
             if ft == "" or ft.lower() == "nan":
-                continue
-            try:
-                ftv = float(ft)
-            except ValueError:
-                continue
+                continue  # legitimately-absent fail_time, not malformed
+            # numeric (relative) OR ISO (real AcmeTrace); raises on bad -> fail loud
             rec = {k: row.get(k) for k in _INCIDENT_KEEP}
-            rec["fail_time"] = ftv
+            rec["fail_time"] = parse_time_value(ft)
             out.append(rec)
     out.sort(key=lambda r: r["fail_time"])
     return out
@@ -87,11 +86,15 @@ def correlated_jobs(incidents, fail_time, window):
     """Other failure incidents within +/- ``window`` of ``fail_time`` (excludes self).
 
     Job<->job temporal correlation (port of loader.correlated_failures) — distinct
-    from the Xid-onset cohort finder.
+    from the Xid-onset cohort finder. ``fail_time`` may be numeric or ISO; for an
+    ISO/datetime center ``window`` (seconds) becomes a timedelta so the comparison
+    stays type-consistent with the incidents' parsed fail_time.
     """
+    center = parse_time_value(fail_time)
+    span = timedelta(seconds=window) if isinstance(center, datetime) else window
     return [
         i for i in incidents
-        if i["fail_time"] != fail_time and abs(i["fail_time"] - fail_time) <= window
+        if i["fail_time"] != center and abs(i["fail_time"] - center) <= span
     ]
 
 

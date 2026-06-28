@@ -2,6 +2,7 @@ from ..detection import stream
 from ..detection import dataset
 from ..detection import classifier
 from ..rca.job_join import correlated_jobs, load_incidents
+from ..telemetry.timeparse import window_bounds
 from ..telemetry.window import window_stats
 from .memory import search_incidents, append_incident
 
@@ -15,9 +16,10 @@ _TICKET = {"n": 0}
 def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
     production fleet emits (dcgm-exporter). Values are window aggregates."""
+    lo, hi = window_bounds(fail_time, window)  # numeric OR ISO fail_time
     return {
-        "DCGM_FI_DEV_POWER_USAGE": window_stats(POWER_CSV, fail_time - window, fail_time + window),
-        "DCGM_FI_DEV_GPU_TEMP": window_stats(TEMP_CSV, fail_time - window, fail_time + window),
+        "DCGM_FI_DEV_POWER_USAGE": window_stats(POWER_CSV, lo, hi),
+        "DCGM_FI_DEV_GPU_TEMP": window_stats(TEMP_CSV, lo, hi),
     }
 
 def find_correlated_failures(fail_time, window=120):
