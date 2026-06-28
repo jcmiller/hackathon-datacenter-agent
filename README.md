@@ -98,7 +98,10 @@ From a single screenshot, Gemini 3.5 Flash correctly:
 ## API
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace |
+| `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace (real-first, badged fixture fallback) |
+| `/api/meta` | GET | Dashboard meta (event window, cascade ts, fleet totals) + source provenance |
+| `/api/fleet` | GET | Per-GPU fleet snapshot (heatmap cells); fault cells are edge-detected hero-burst members only + provenance |
+| `/api/telemetry` | GET | Per-GPU real telemetry window around a selected `incident` (or the incident index) + provenance |
 | `/api/triage` | POST SSE | Stream Gemini 2.5 Flash agent events for one incident |
 | `/api/model` | GET | Current predictor: version, model_type, val_auc, n_samples |
 | `/api/monitor` | GET | Per-row risk scores + alert/miss status from the incumbent (i6k); real droplet artifacts win, honest demo fixture fallback. Optional `budget`/`horizon` params |
