@@ -8,17 +8,14 @@ from scripts.lfs_helper import (
     resolve_data_path,
 )
 
-
 OID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-POINTER = (
-    "version https://git-lfs.github.com/spec/v1\n"
-    f"oid sha256:{OID}\n"
-    "size 11\n"
-)
+POINTER = f"version https://git-lfs.github.com/spec/v1\noid sha256:{OID}\nsize 11\n"
 
 
 def _git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    )
 
 
 def _write_repo(tmp_path):

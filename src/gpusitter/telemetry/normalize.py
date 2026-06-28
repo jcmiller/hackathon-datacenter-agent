@@ -15,7 +15,7 @@ cross-namespace join is only possible when an external *alias map*
 
 from __future__ import annotations
 
-from typing import Mapping, Optional
+from collections.abc import Mapping
 
 # GpuId is the canonical domain identity; re-exported here so telemetry's own
 # modules can keep importing it from .normalize.
@@ -24,7 +24,7 @@ from ..domain.models import GpuId
 __all__ = ["GpuId", "parse_gpu_id"]
 
 
-def parse_gpu_id(raw: str, alias: Optional[Mapping[str, str]] = None) -> GpuId:
+def parse_gpu_id(raw: str, alias: Mapping[str, str] | None = None) -> GpuId:
     """Parse a raw wide-CSV column name into a canonical :class:`GpuId`.
 
     Splits on the *last* ``-`` (the GPU index); everything before is the node.

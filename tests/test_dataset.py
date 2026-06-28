@@ -1,5 +1,7 @@
 import pandas as pd
+
 from gpusitter.detection.dataset import build_xy, time_split
+
 
 def test_build_xy_shapes_and_labels():
     hist = [
@@ -10,6 +12,7 @@ def test_build_xy_shapes_and_labels():
     assert y == [0, 1]
     assert list(X["gpu_num"]) == [8, 16]
     assert "type_train" in X.columns and "type_eval" in X.columns
+
 
 def test_time_split_respects_order():
     X = pd.DataFrame({"a": list(range(1, 11))})

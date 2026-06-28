@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -37,7 +36,7 @@ class Incident:
     job_id: str
     fail_time: datetime  # tz-aware
     state: str  # FAILED | NODE_FAIL | ...
-    type: Optional[str] = None
+    type: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -66,7 +65,7 @@ class SopEntry:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SopEntry":
+    def from_dict(cls, d: dict) -> SopEntry:
         return cls(
             type=d.get("type", ""),
             summary=d.get("summary", ""),

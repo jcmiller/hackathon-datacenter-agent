@@ -14,7 +14,6 @@ import csv
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
 
 from ..telemetry.timeparse import parse_time_value
 
@@ -33,11 +32,18 @@ def _parse(ts: str) -> datetime:
 # Hardware/job failure states (loader parity).
 FAIL_STATES = {"NODE_FAIL", "FAILED"}
 _INCIDENT_KEEP = (
-    "job_id", "type", "node_num", "gpu_num", "state", "fail_time", "duration", "user",
+    "job_id",
+    "type",
+    "node_num",
+    "gpu_num",
+    "state",
+    "fail_time",
+    "duration",
+    "user",
 )
 
 
-def load_failed_jobs(trace_csv: str, states=FAIL_STATES) -> List[FailedJob]:
+def load_failed_jobs(trace_csv: str, states=FAIL_STATES) -> list[FailedJob]:
     """Failed jobs with a parseable ISO fail_time, as tz-aware records.
 
     The datetime/real-trace path (used by the coincidence analysis); ``states``
@@ -60,7 +66,7 @@ def load_failed_jobs(trace_csv: str, states=FAIL_STATES) -> List[FailedJob]:
     return jobs
 
 
-def load_incidents(trace_csv: str) -> List[dict]:
+def load_incidents(trace_csv: str) -> list[dict]:
     """Failure incidents (NODE_FAIL|FAILED, fail_time present), sorted by fail_time.
 
     Numeric fail_time (relative seconds), dict records — the shape the agent's
@@ -93,12 +99,11 @@ def correlated_jobs(incidents, fail_time, window):
     center = parse_time_value(fail_time)
     span = timedelta(seconds=window) if isinstance(center, datetime) else window
     return [
-        i for i in incidents
-        if i["fail_time"] != center and abs(i["fail_time"] - center) <= span
+        i for i in incidents if i["fail_time"] != center and abs(i["fail_time"] - center) <= span
     ]
 
 
-def xid_onset_events(store) -> List[Tuple[datetime, str]]:
+def xid_onset_events(store) -> list[tuple[datetime, str]]:
     """All edge-detected Xid onsets in the store as sorted (datetime, gpu)."""
     events = []
     for g in store.gpus():
@@ -113,7 +118,7 @@ def xid_onset_events(store) -> List[Tuple[datetime, str]]:
     return events
 
 
-def stream_xid_onset_records(xid_csv: str) -> List[Tuple[datetime, str, float]]:
+def stream_xid_onset_records(xid_csv: str) -> list[tuple[datetime, str, float]]:
     """Edge-detected Xid onsets streamed from a wide XID CSV, WITH the fault code.
 
     Same empty-aware, memory-bounded edge detection as :func:`stream_xid_onsets`
@@ -160,7 +165,7 @@ def stream_xid_onset_records(xid_csv: str) -> List[Tuple[datetime, str, float]]:
     return events
 
 
-def stream_xid_onsets(xid_csv: str) -> List[Tuple[datetime, str]]:
+def stream_xid_onsets(xid_csv: str) -> list[tuple[datetime, str]]:
     """Edge-detected Xid onsets streamed from a wide XID CSV as ``(datetime, gpu)``.
 
     Projection of :func:`stream_xid_onset_records` that drops the fault code;
@@ -171,7 +176,7 @@ def stream_xid_onsets(xid_csv: str) -> List[Tuple[datetime, str]]:
     return [(t, gpu) for (t, gpu, _code) in stream_xid_onset_records(xid_csv)]
 
 
-def xid_sample_span(xid_csv: str) -> Optional[Tuple[datetime, datetime]]:
+def xid_sample_span(xid_csv: str) -> tuple[datetime, datetime] | None:
     """(first, last) timestamp of the XID CSV — the telemetry SAMPLE coverage.
 
     This is the window during which telemetry exists, independent of when faults
@@ -195,7 +200,7 @@ def xid_sample_span(xid_csv: str) -> Optional[Tuple[datetime, datetime]]:
     return (_parse(first), _parse(last))
 
 
-def telemetry_span(store) -> Optional[Tuple[datetime, datetime]]:
+def telemetry_span(store) -> tuple[datetime, datetime] | None:
     """(min, max) XID timestamp as tz-aware datetimes, or None if empty."""
     times = []
     for g in store.gpus():

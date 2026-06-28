@@ -1,13 +1,17 @@
 import pandas as pd
+
 from .dataset import FAIL_STATES
 
 HISTORY = []
 
+
 def reset_history():
     HISTORY.clear()
 
+
 def _load(path):
     return pd.read_csv(path).to_dict("records")
+
 
 def warm_start(path, n_incidents):
     records = _load(path)
@@ -23,6 +27,7 @@ def warm_start(path, n_incidents):
     HISTORY.clear()
     HISTORY.extend(records)
     return records
+
 
 def stream_jobs(path, start_index):
     for r in _load(path)[start_index:]:

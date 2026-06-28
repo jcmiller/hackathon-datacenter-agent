@@ -1,25 +1,29 @@
 """Sim backend: SSE incident stream, streaming triage, model card, feedback."""
-import asyncio, json, threading
+
+import asyncio
+import json
+import threading
 from datetime import datetime
 from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..detection import stream, classifier
 from ..agent.agent import triage_stream
-from ..agent.tools import SOP_PATH, MODEL_STATE_PATH
+from ..agent.tools import MODEL_STATE_PATH, SOP_PATH
+from ..detection import classifier
 from . import computer_use as cu
 
 app = FastAPI()
 
-JOBS_CSV            = "data/jobs.csv"
-TRACE_CSV           = "data/acme-util/data/job_trace/trace_kalos.csv"
+JOBS_CSV = "data/jobs.csv"
+TRACE_CSV = "data/acme-util/data/job_trace/trace_kalos.csv"
 WARM_START_INCIDENTS = 100
-STEP_SECONDS         = 3
+STEP_SECONDS = 3
 
-_DASHBOARD   = Path(__file__).parent / "dashboard" / "index.html"
-_assets_dir  = _DASHBOARD.parent / "assets"
+_DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
+_assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
 
 if _assets_dir.exists():
@@ -33,7 +37,9 @@ _started = {"done": False}
 
 def _get_incidents() -> list[dict]:
     """Load incidents from fixture JSON (relative path) or trace CSV (absolute/injected path)."""
-    from ..rca.job_join import load_incidents as _load  # noqa: lazy import
+    # lazy import: avoids pulling the RCA/job-join stack at module load time
+    from ..rca.job_join import load_incidents as _load
+
     fixtures_path = _DASHBOARD.parent / "fixtures" / "incidents.json"
     key = str(TRACE_CSV)
     if key not in _incidents_cache:
@@ -65,6 +71,7 @@ async def incidents(request: Request):
                 break
             yield f"data: {_json(inc)}\n\n"
             await asyncio.sleep(STEP_SECONDS)
+
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
@@ -96,9 +103,15 @@ async def do_triage(incident: dict):
 def get_model():
     m = classifier.INCUMBENT
     if m is not None:
-        return {"model": {"version": m.version, "model_type": m.model_type,
-                          "features": m.features, "val_auc": round(m.auc, 3) if m.auc else None,
-                          "n_samples": m.n_samples}}
+        return {
+            "model": {
+                "version": m.version,
+                "model_type": m.model_type,
+                "features": m.features,
+                "val_auc": round(m.auc, 3) if m.auc else None,
+                "n_samples": m.n_samples,
+            }
+        }
     state = classifier.load_state(MODEL_STATE_PATH)
     if state:
         return {"model": state}
@@ -125,7 +138,8 @@ async def record_feedback(body: dict):
     with open(SOP_PATH, "w") as f:
         json.dump(entries, f, indent=2)
 
-    from ..agent.memory import _embed, _load_vectors, _save_vectors, _record_text
+    from ..agent.memory import _embed, _load_vectors, _record_text, _save_vectors
+
     text = _record_text(entries[idx]) + f" outcome:{outcome}"
     vec = _embed(text)
     if vec is not None:
@@ -153,6 +167,7 @@ async def computer_use_session(body: dict):
 @app.get("/model")
 def model_legacy():
     return get_model()
+
 
 @app.post("/triage")
 async def triage_legacy(incident: dict):

@@ -4,15 +4,11 @@ from gpusitter.telemetry.store import TelemetryStore
 
 
 def test_value_and_snapshot_across_metrics(gpu_temp_csv, power_usage_csv):
-    store = TelemetryStore.load(
-        {"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv}
-    )
+    store = TelemetryStore.load({"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv})
 
     # metric[gpu][t] point lookup.
     assert store.value("GPU_TEMP", "172.31.0.5#3", "2023-08-15 00:00:00+08:00") == 50.0
-    assert (
-        store.value("POWER_USAGE", "172.31.0.5#3", "2023-08-15 00:00:00+08:00") == 300.0
-    )
+    assert store.value("POWER_USAGE", "172.31.0.5#3", "2023-08-15 00:00:00+08:00") == 300.0
 
     # per-(t,gpu) snapshot stitches both metrics for one GPU at one instant.
     snap = store.snapshot("172.31.0.5#3", "2023-08-15 00:00:00+08:00")
@@ -42,9 +38,7 @@ def test_id_normalization_joins_two_differently_named_metrics(
 def test_without_alias_metrics_do_not_merge(gpu_temp_csv, sm_active_csv):
     # Non-vacuity: drop the alias and the join must collapse — the pod GPU and
     # the IP GPU become two separate canonical ids.
-    store = TelemetryStore.load(
-        {"GPU_TEMP": gpu_temp_csv, "SM_ACTIVE": sm_active_csv}
-    )
+    store = TelemetryStore.load({"GPU_TEMP": gpu_temp_csv, "SM_ACTIVE": sm_active_csv})
     snap = store.snapshot("172.31.0.5#3", "2023-08-15 00:00:00+08:00")
     assert snap == {"GPU_TEMP": 50.0}
     assert "lingjun-pod9-0001#3" in store.gpus()
@@ -61,9 +55,7 @@ def test_series_returns_sorted_timeseries(power_usage_csv):
 
 
 def test_window_returns_metrics_over_time_range(gpu_temp_csv, power_usage_csv):
-    store = TelemetryStore.load(
-        {"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv}
-    )
+    store = TelemetryStore.load({"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv})
     win = store.window(
         "172.31.0.5#3",
         "2023-08-15 00:00:00+08:00",
@@ -85,9 +77,7 @@ def test_load_respects_time_range_and_downsample(power_usage_csv):
 
 
 def test_gpus_and_metrics_enumerated(gpu_temp_csv, power_usage_csv):
-    store = TelemetryStore.load(
-        {"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv}
-    )
+    store = TelemetryStore.load({"GPU_TEMP": gpu_temp_csv, "POWER_USAGE": power_usage_csv})
     assert set(store.metrics()) == {"GPU_TEMP", "POWER_USAGE"}
     assert "172.31.0.5#3" in store.gpus()
     assert "172.31.0.9#0" in store.gpus()

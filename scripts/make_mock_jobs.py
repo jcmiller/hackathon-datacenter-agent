@@ -6,6 +6,7 @@ signal is baked in: higher power/temp jobs fail more often, so the classifier's
 ROC-AUC is meaningfully > 0.5. Mock start/end times are integer seconds for
 simplicity; real AcmeTrace timestamps are ISO UTC strings (handled in precompute).
 """
+
 import csv
 import math
 import os
@@ -27,13 +28,17 @@ def _row(i):
     start = 1_692_000_000 + i * 900
     dur = random.randint(300, 6000)
     return {
-        "job_id": f"job{i:04d}", "type": random.choice(TYPES),
-        "node_num": random.randint(1, 16), "gpu_num": random.choice([8, 16, 32, 64]),
+        "job_id": f"job{i:04d}",
+        "type": random.choice(TYPES),
+        "node_num": random.randint(1, 16),
+        "gpu_num": random.choice([8, 16, 32, 64]),
         "cpu_num": random.choice([16, 32, 64, 128]),
-        "duration": dur, "queue": random.randint(0, 1200),
+        "duration": dur,
+        "queue": random.randint(0, 1200),
         "mem_per_pod_GB": random.choice([40, 80, 160]),
         "state": "FAILED" if failed else random.choice(["COMPLETED", "COMPLETED", "CANCELLED"]),
-        "start_time": start, "end_time": start + dur,
+        "start_time": start,
+        "end_time": start + dur,
         "fail_time": (start + dur - 60) if failed else "",
         "power_mean": round(power_max * random.uniform(0.7, 0.9), 1),
         "power_max": round(power_max, 1),

@@ -11,7 +11,8 @@ but allocated).
 from __future__ import annotations
 
 import csv
-from typing import Iterable, Iterator, Mapping, NamedTuple, Optional, Tuple
+from collections.abc import Iterable, Iterator, Mapping
+from typing import NamedTuple
 
 from .normalize import GpuId, parse_gpu_id
 
@@ -29,9 +30,9 @@ def iter_long_records(
     path: str,
     metric: str,
     *,
-    time_range: Optional[Tuple[str, str]] = None,
-    gpus: Optional[Iterable[str]] = None,
-    alias: Optional[Mapping[str, str]] = None,
+    time_range: tuple[str, str] | None = None,
+    gpus: Iterable[str] | None = None,
+    alias: Mapping[str, str] | None = None,
 ) -> Iterator[LongRecord]:
     """Stream long records from one wide metric CSV.
 
@@ -76,7 +77,7 @@ def iter_long_records(
                 # replay a short incident window without a full-file scan.
                 break
             # row may be shorter than header on ragged lines; zip stops short.
-            for gpu, cell in zip(col_gpus, row[1:]):
+            for gpu, cell in zip(col_gpus, row[1:], strict=False):
                 if cell == "":
                     continue
                 if keep is not None and gpu.canonical not in keep:

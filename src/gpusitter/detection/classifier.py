@@ -1,9 +1,11 @@
-import json, os
+import json
+import os
 from dataclasses import dataclass
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
+
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
+from sklearn.tree import DecisionTreeClassifier
 
 _MODELS = {
     "logreg": lambda: LogisticRegression(max_iter=1000),
@@ -40,6 +42,7 @@ def auc(estimator, Xval, yval):
     proba = estimator.predict_proba(Xval)[:, 1]
     return float(roc_auc_score(yval, proba))
 
+
 auc_from_lists = auc  # alias — both work on plain lists now
 
 
@@ -57,13 +60,17 @@ def save_state(path: str) -> None:
         return
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w") as f:
-        json.dump({
-            "version": INCUMBENT.version,
-            "model_type": INCUMBENT.model_type,
-            "features": INCUMBENT.features,
-            "val_auc": round(INCUMBENT.auc, 4),
-            "n_samples": INCUMBENT.n_samples,
-        }, f, indent=2)
+        json.dump(
+            {
+                "version": INCUMBENT.version,
+                "model_type": INCUMBENT.model_type,
+                "features": INCUMBENT.features,
+                "val_auc": round(INCUMBENT.auc, 4),
+                "n_samples": INCUMBENT.n_samples,
+            },
+            f,
+            indent=2,
+        )
 
 
 def load_state(path: str) -> dict | None:

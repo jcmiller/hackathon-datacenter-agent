@@ -21,9 +21,9 @@ import csv
 import os
 import re
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 _OID_RE = re.compile(r"^oid sha256:([a-f0-9]{64})$", re.MULTILINE)
 _SIZE_RE = re.compile(r"^size ([0-9]+)$", re.MULTILINE)
@@ -260,9 +260,7 @@ def validate_timeseries_csv(path: str | os.PathLike[str]) -> str:
     first_line = head.splitlines()[0] if head.strip() else ""
     header = next(csv.reader([first_line])) if first_line else []
     if not header or header[0] != "Time" or len(header) < 2:
-        raise ValueError(
-            f"not a wide time-series CSV (need 'Time' + >=1 GPU column): {p}"
-        )
+        raise ValueError(f"not a wide time-series CSV (need 'Time' + >=1 GPU column): {p}")
     return p
 
 
