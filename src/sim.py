@@ -275,6 +275,8 @@ async def telemetry_stream(request: Request):
         finally:
             if queue in subscribers:
                 subscribers.remove(queue)
+                
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # --- GPUSitter Triage / Processing Server logic ---
 
