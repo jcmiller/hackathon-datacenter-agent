@@ -1,4 +1,4 @@
-# GPUSitter Dashboard (draft)
+# GPUSitter Dashboard
 
 Mission-control UI for the GPU on-call RCA agent. Vite + React + TypeScript,
 "ops terminal" aesthetic.
@@ -29,12 +29,17 @@ as static fixtures in `public/fixtures/`, generated around the **Aug-29 13:57
 cluster-wide Xid cascade** (882 GPUs across 141 nodes — the team's hero event).
 See `../docs/data-findings.md` and `../docs/DATA.md`.
 
-### Wiring to the real backend later
+## Backend
 
-`src/data.ts` reads `/fixtures/*.json`. When the FastAPI sim backend exists,
-point those fetches at `/api/*` (already proxied in `vite.config.ts`) and swap
-`src/lib/replay.ts` for a real `EventSource('/api/triage')` — the TypeScript
-shapes in `src/types.ts` are the contract and don't change.
+Live triage uses `EventSource('/api/triage')` — wired in `AgentTriage.tsx`.
+The FastAPI backend (`src/gpusitter/app/sim.py`) serves the compiled dashboard
+and all `/api/*` endpoints. See the root `README.md` for the full API table.
+
+Build and deploy the dashboard:
+```bash
+npm run build       # outputs to dist/
+# then copy dist/* → src/gpusitter/app/dashboard/ and deploy the server
+```
 
 ## Fixtures (data contract)
 
@@ -43,5 +48,4 @@ shapes in `src/types.ts` are the contract and don't change.
 | `incidents.json` | `Incident[]` |
 | `fleet.json` | `Fleet` (per-GPU heatmap snapshot) |
 | `telemetry/<id>.json` | `TelemetryWindow` (power/temp/util series) |
-| `agentRuns.json` | `Record<incidentId, AgentEvent[]>` |
 | `meta.json` | `Meta` (window, cascade ts, totals) |
