@@ -17,12 +17,17 @@ Why "events" and not nonzero cells
 ``XID_ERRORS.csv`` is a DCGM *gauge*: it holds the GPU's last Xid code and
 re-emits it every 15s sample until the GPU is reset/cleared. A healthy/cleared
 GPU has an *empty* cell (the trace carries no explicit ``0`` cells), so empty ==
-cleared baseline. A single fault therefore paints tens of thousands of repeated
-nonzero cells. An EVENT is a *rising edge*: empty/0 -> nonzero (the GPU's first
-nonzero appearance), or a change to a different nonzero code. Codes already
-present in the first sample (t0) are left-censored (onset predates the window)
-and excluded. (On the real trace, code 43 paints tens of millions of nonzero
-cells but only a few hundred events.)
+cleared/idle baseline. A single fault therefore paints tens of thousands of
+repeated nonzero cells. An ONSET is a transition INTO a fault: nonzero where the
+GPU's prior observed state was non-fault (healthy ``0`` or idle/empty). Latched
+faults (nonzero -> nonzero, including a code change with no intervening clear)
+are NOT separate onsets; codes already present at the first sample (t0) are
+left-censored (onset predates the window) and excluded. Onset detection is the
+canonical ``gpusitter.rca.job_join.stream_xid_onset_records`` — empty-aware, so a
+fault that clears (to empty) and re-raises the same code is a NEW onset (the
+empty-skipping long-record path collapsed that and undercounted). (On the real
+trace, code 43 paints tens of millions of nonzero cells but only a few hundred
+onsets.)
 
 Scale discipline
 ----------------
@@ -50,10 +55,9 @@ from collections import defaultdict
 
 # Make the ``gpusitter`` package importable when run from the repo root (the
 # package lives under ``src/`` per the hatchling src-layout).
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
-)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
+from gpusitter.rca.job_join import stream_xid_onset_records  # noqa: E402
 from gpusitter.telemetry.ingest import iter_long_records  # noqa: E402
 
 # Kalos DCGM sample period (verified: 15s grid).
@@ -91,67 +95,46 @@ from typing import NamedTuple  # noqa: E402
 
 class XidEvent(NamedTuple):
     gpu: str  # canonical GPU id
-    t: str    # ISO timestamp of the rising edge
+    t: str  # ISO timestamp of the rising edge
     code: int
 
 
 # --------------------------------------------------------------------------- #
 # 1. Event extraction (rising-edge detection over the gauge)
 # --------------------------------------------------------------------------- #
-def _first_timestamp(xid_csv: str) -> str | None:
-    """The trace's first data-row timestamp (cheap: reads only the first row).
-
-    Used as the left-censoring boundary. Read from the Time column directly, not
-    from the first *non-empty* record, so it is correct even if the first row has
-    no faulted GPUs.
-    """
-    import csv
-
-    with open(xid_csv, newline="") as fh:
-        reader = csv.reader(fh)
-        next(reader, None)  # header
-        for row in reader:
-            if row:
-                return row[0]
-    return None
-
-
 def extract_events(xid_csv: str) -> list[XidEvent]:
-    """Stream XID_ERRORS and return true fault events (rising edges).
+    """Return true fault *onsets* via the canonical empty-aware edge detector.
 
-    Gauge semantics on this trace: a cell holds the GPU's current Xid code and is
-    re-emitted every sample until cleared; a **healthy/cleared** GPU has an
-    *empty* cell (the data contains no explicit ``0`` cells). So absent/empty is
-    the cleared baseline, and a fault *event* is a rising edge: empty/0 -> nonzero
-    (the GPU's first nonzero appearance), or a change to a *different* nonzero
-    code while held.
+    Delegates to :func:`gpusitter.rca.job_join.stream_xid_onset_records` — the
+    same detector the runtime RCA/detection path uses — so eku's label scheme is
+    by construction identical to what detection (5fq) and the env (w28) see.
 
-    Left-censoring: a code already present in the trace's **first sample** (t0)
-    was raised before the observation window opened, so its true onset is unknown
-    and it is **not** counted. This excludes only those boundary states — a GPU
-    that is healthy (empty) at t0 and first faults later is a genuine observed
-    onset and IS counted. (Earlier rework wrongly suppressed *every* GPU's first
-    non-empty sample, which — because healthy is empty here — discarded almost all
-    real onsets.)
+    Onset semantics (do NOT re-implement; see the canonical detector):
+    - A cell holds the GPU's current Xid code, re-emitted every sample until
+      cleared. A healthy/cleared GPU is an *empty* cell (the trace has no explicit
+      ``0`` cells). Empty therefore reads as a clear/idle state.
+    - An onset is a transition INTO a fault: nonzero where the GPU's prior
+      OBSERVED state was non-fault (healthy ``0`` or idle/empty). Crucially, the
+      detector reads raw rows (not the empty-skipping long-record iterator), so a
+      fault that clears to empty and then re-raises the **same** code is a new
+      onset — the empty-skipping path collapsed that to one and undercounted.
+    - Excluded: latched faults (nonzero -> nonzero, incl. a code change with no
+      intervening clear) and a GPU whose very first observation is already nonzero
+      (left-censored: pre-trace onset unknown). In a wide CSV every GPU is
+      observed (idle/0) at t0, so this is exactly the t0 left-censoring.
     """
-    first_ts = _first_timestamp(xid_csv)
-    last: dict[str, int] = {}
-    events: list[XidEvent] = []
-    for rec in iter_long_records(xid_csv, "XID_ERRORS"):
-        gpu = rec.gpu.canonical
-        code = int(rec.value)
-        prev = last.get(gpu, 0)  # empty/absent cell == cleared/healthy baseline
-        if code != 0 and code != prev and rec.t != first_ts:
-            events.append(XidEvent(gpu=gpu, t=rec.t, code=code))
-        last[gpu] = code
-    return events
+    return [
+        XidEvent(gpu=gpu, t=ts.isoformat(sep=" "), code=int(code))
+        for (ts, gpu, code) in stream_xid_onset_records(xid_csv)
+    ]
 
 
 def left_censored_count(xid_csv: str) -> int:
-    """Distinct GPUs already nonzero at the trace's first sample (t0).
+    """Distinct fault states already present at the trace's first sample (t0).
 
-    These are excluded by :func:`extract_events` as left-censored. Reported for
-    transparency (they are the gap between raw rising edges and counted onsets).
+    These t0 onsets are excluded by the canonical detector as left-censored
+    (pre-trace onset unknown). Reported for transparency — the gap between the raw
+    first-row nonzero count and the counted onsets.
     """
     import csv
 
@@ -193,9 +176,7 @@ def _iso_delta_seconds(t0: str, t1: str) -> float:
     return (datetime.strptime(t1, fmt) - datetime.strptime(t0, fmt)).total_seconds()
 
 
-def frequency_stats(
-    events: list[XidEvent], n_gpus_total: int, span_seconds: float
-) -> dict:
+def frequency_stats(events: list[XidEvent], n_gpus_total: int, span_seconds: float) -> dict:
     """Distribution + MTBF. MTBF is reported as GPU-hours per event over the
     observed GPU-time (n_gpus_total * span)."""
     by_code: dict[int, int] = defaultdict(int)
@@ -502,14 +483,14 @@ def characterize(
         "frequency": freq,
         "temporal": temporal,
         "precursors": precursors,
-        "events": [
-            {"gpu": e.gpu, "t": e.t, "code": e.code} for e in events
-        ],
+        "events": [{"gpu": e.gpu, "t": e.t, "code": e.code} for e in events],
         "label_scheme": {
-            "event_definition": "rising edge of XID_ERRORS gauge "
-            "(empty/0 cleared-baseline -> nonzero, or change to a different "
-            "nonzero code); codes already present at the first sample (t0) are "
-            "left-censored and excluded",
+            "event_definition": "Xid onset = transition INTO a fault "
+            "(nonzero where prior observed state was non-fault: healthy 0 or "
+            "idle/empty cell). Latched faults (nonzero->nonzero, incl. code "
+            "change with no clear) and t0-left-censored states are excluded. "
+            "Empty-aware (clear->same-code re-raise is a new onset); detector = "
+            "gpusitter.rca.job_join.stream_xid_onset_records",
             "severity_groups": XID_SEVERITY,
             "horizons_seconds": horizons_seconds,
             "baseline_seconds": baseline_seconds,
@@ -576,8 +557,7 @@ def main() -> int:
             print(f"  {metric}: {pre.get('error')}")
             continue
         cells = " ".join(
-            f"{h}s={hh['frac_detectable_2sigma']}"
-            for h, hh in pre["by_horizon"].items()
+            f"{h}s={hh['frac_detectable_2sigma']}" for h, hh in pre["by_horizon"].items()
         )
         print(f"  {metric}: {cells}  (n={pre['events_with_any_baseline_data']})")
 

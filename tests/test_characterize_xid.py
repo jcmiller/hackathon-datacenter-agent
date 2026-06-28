@@ -31,7 +31,10 @@ T0 = datetime.strptime("2023-08-15 15:30:15+08:00", FMT)
 
 
 def _ts(i):
-    return (T0 + timedelta(seconds=15 * i)).strftime(FMT)
+    # isoformat(sep=" ") emits the colon offset ("+08:00") — the real kalos cell
+    # format, and what extract_events emits (it parses via fromisoformat). Using
+    # strftime("%z") here would give "+0800" and never match event timestamps.
+    return (T0 + timedelta(seconds=15 * i)).isoformat(sep=" ")
 
 
 def _write_wide(path, gpu_cols, rows):
@@ -79,14 +82,51 @@ def test_clear_then_refault_is_two_events(tmp_path):
     assert all(e.code == 43 for e in events)
 
 
-def test_code_change_is_new_event(tmp_path):
-    """A change to a different nonzero code fires a new event (31 then 45)."""
+def test_empty_clear_same_code_refault_is_two_onsets(tmp_path):
+    """THE empty-clear regression. A fault that clears to an EMPTY cell and then
+    re-raises the SAME code is two onsets. The empty-skipping long-record path
+    never sees the clear (last stays 43) and collapses this to one — the bug nav
+    rejected. The canonical empty-aware detector treats empty as idle/clear, so
+    empty->43, (empty), empty->43 yields exactly TWO onsets."""
+    gpus = ["10.0.0.1-0"]
+    rows = [
+        (0, {}),  # idle (empty) — establishes non-fault state
+        (1, {"10.0.0.1-0": "43"}),  # idle -> 43  : onset 1
+        (2, {}),  # cleared back to empty/idle
+        (3, {"10.0.0.1-0": "43"}),  # idle -> 43  : onset 2 (same code)
+    ]
+    csv = tmp_path / "XID_ERRORS.csv"
+    _write_wide(csv, gpus, rows)
+    events = cx.extract_events(str(csv))
+    assert [(e.code, e.t) for e in events] == [(43, _ts(1)), (43, _ts(3))]
+
+
+def test_latched_code_change_is_not_a_new_onset(tmp_path):
+    """Canonical onset semantics: an onset is a transition INTO a fault from a
+    non-fault state. A code change while already faulted with NO intervening clear
+    (31 -> 45) is a latched fault, NOT a new onset — only the first 31 counts."""
     gpus = ["10.0.0.2-3"]
     rows = [
         (0, {"10.0.0.2-3": "0"}),
-        (1, {"10.0.0.2-3": "31"}),
-        (2, {"10.0.0.2-3": "31"}),
-        (3, {"10.0.0.2-3": "45"}),
+        (1, {"10.0.0.2-3": "31"}),  # 0 -> 31 : onset
+        (2, {"10.0.0.2-3": "31"}),  # latched
+        (3, {"10.0.0.2-3": "45"}),  # 31 -> 45 latched (no clear) : NOT an onset
+    ]
+    csv = tmp_path / "XID_ERRORS.csv"
+    _write_wide(csv, gpus, rows)
+    events = cx.extract_events(str(csv))
+    assert [(e.code, e.t) for e in events] == [(31, _ts(1))]
+
+
+def test_cleared_then_different_code_is_new_onset(tmp_path):
+    """With a clear between them, two different codes are two onsets: 31 clears to
+    0, then 45 is a fresh transition into a fault."""
+    gpus = ["10.0.0.2-3"]
+    rows = [
+        (0, {"10.0.0.2-3": "0"}),
+        (1, {"10.0.0.2-3": "31"}),  # 0 -> 31 : onset
+        (2, {"10.0.0.2-3": "0"}),  # cleared
+        (3, {"10.0.0.2-3": "45"}),  # 0 -> 45 : onset
     ]
     csv = tmp_path / "XID_ERRORS.csv"
     _write_wide(csv, gpus, rows)
@@ -144,7 +184,7 @@ def test_t0_left_censored_then_clear_then_refault_is_one_event(tmp_path):
     rows = [
         (0, {"10.0.0.1-0": "43"}),  # left-censored at t0, suppressed
         (1, {"10.0.0.1-0": "43"}),
-        (2, {"10.0.0.1-0": "0"}),   # cleared
+        (2, {"10.0.0.1-0": "0"}),  # cleared
         (3, {"10.0.0.1-0": "43"}),  # genuine observed re-fault -> 1 event
     ]
     csv = tmp_path / "XID_ERRORS.csv"
@@ -159,7 +199,7 @@ def test_first_row_all_empty_then_onset_counted(tmp_path):
     genuine onset, not suppressed. Guards the _first_timestamp boundary."""
     gpus = ["10.0.0.1-0"]
     rows = [
-        (0, {}),                    # all-empty first row (t0); no faults
+        (0, {}),  # all-empty first row (t0); no faults
         (1, {"10.0.0.1-0": "43"}),  # first nonzero, after t0 -> event
     ]
     csv = tmp_path / "XID_ERRORS.csv"
@@ -238,9 +278,7 @@ def test_prefault_window_bounds_and_ramp(tmp_path):
 
     key = f"{gpu_canon}@{_ts(60)}"
     event_times = {key: (gpu_canon, _ts(60))}
-    windows = cx.collect_prefault_windows(
-        str(csv), "GPU_TEMP", event_times, baseline_seconds=3600
-    )
+    windows = cx.collect_prefault_windows(str(csv), "GPU_TEMP", event_times, baseline_seconds=3600)
     samples = windows[key]
     # All retained samples are strictly before the fault timestamp.
     assert samples, "expected pre-fault samples"
@@ -269,9 +307,7 @@ def test_window_excludes_samples_before_baseline_and_after_fault(tmp_path):
     # Fault at sample 20; baseline window only 90s (6 samples) before it.
     key = f"{gpu_canon}@{_ts(20)}"
     event_times = {key: (gpu_canon, _ts(20))}
-    windows = cx.collect_prefault_windows(
-        str(csv), "GPU_TEMP", event_times, baseline_seconds=90
-    )
+    windows = cx.collect_prefault_windows(str(csv), "GPU_TEMP", event_times, baseline_seconds=90)
     samples = windows[key]
     assert all(t < _ts(20) for t, _ in samples)  # nothing from >= fault
     assert all(v == 50.0 for _, v in samples)  # no 99.0 leak
@@ -305,8 +341,6 @@ def test_repeated_same_gpu_events_kept_distinct(tmp_path):
     # The shared 50.0 samples in [e1-10min, e1) feed BOTH windows (overlap).
     assert windows[k1][0] in windows[k2]
 
-    stats = cx.precursor_stats(
-        windows, event_times, horizons_seconds=[60], lead_for_baseline=60
-    )
+    stats = cx.precursor_stats(windows, event_times, horizons_seconds=[60], lead_for_baseline=60)
     # Two events contributed baseline data, not one collapsed event.
     assert stats["events_with_any_baseline_data"] == 2
