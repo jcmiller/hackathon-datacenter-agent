@@ -14,8 +14,13 @@ def get_lfs_cache_path(repo_dir: str, file_path: str) -> str:
     if not os.path.exists(pointer_file):
         raise FileNotFoundError(f"Pointer file not found: {pointer_file}")
         
-    with open(pointer_file, "r") as f:
-        content = f.read()
+    with open(pointer_file, "r", errors="ignore") as f:
+        # Just read the first 200 chars to check if it's a pointer
+        content = f.read(200)
+        
+    # If the file is already checked out (real file), it won't start with LFS header
+    if not content.startswith("version https://git-lfs.github.com/spec/v1"):
+        return pointer_file
         
     # LFS pointer files look like:
     # version https://git-lfs.github.com/spec/v1
@@ -23,7 +28,7 @@ def get_lfs_cache_path(repo_dir: str, file_path: str) -> str:
     # size 123456
     match = re.search(r"oid sha256:([a-f0-9]{64})", content)
     if not match:
-        raise ValueError(f"File is not a valid Git LFS pointer: {file_path}")
+        return pointer_file # Fallback in case of custom formats or real file
         
     sha256 = match.group(1)
     
