@@ -1,5 +1,5 @@
 import pandas as pd
-from src.loader import load_incidents, telemetry_window, correlated_failures
+from backend.loader import load_incidents, telemetry_window, correlated_failures
 
 def _write_trace(tmp_path):
     df = pd.DataFrame([
