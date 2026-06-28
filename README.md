@@ -38,10 +38,10 @@ Two things make this more than "an LLM on a dashboard":
 ## Quick start (local, no big data needed)
 
 ```bash
-pip install -r requirements.txt
+uv sync                                 # or: pip install -e .  (installs the gpusitter package)
 python scripts/make_mock_jobs.py        # writes a small data/jobs.csv (synthetic, schema-correct)
 export GOOGLE_API_KEY=...               # needed only for the live agent /triage
-PYTHONPATH=src uvicorn gpusitter.app.sim:app --reload        # → http://localhost:8000
+uvicorn gpusitter.app.sim:app --reload  # → http://localhost:8000
 pytest -q                               # offline test suite
 ```
 
