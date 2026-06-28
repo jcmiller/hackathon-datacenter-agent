@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "model_type": "logreg",
+  "features": [
+    "GPU_TEMP_last",
+    "GPU_TEMP_mean",
+    "GPU_TEMP_slope",
+    "POWER_USAGE_last",
+    "MEMORY_TEMP_last"
+  ],
+  "primary_metric": "roc_auc",
+  "primary_value": 0.8094740508533612,
+  "metrics": {
+    "roc_auc": 0.8094740508533612,
+    "avg_precision": 0.5694569709209192,
+    "roc_auc_permuted_baseline": 0.4545454545454546,
+    "roc_auc_permuted_n": 8,
+    "base_rate": 0.275,
+    "alert_budget": [
+      {
+        "budget": 0.01,
+        "k": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+        "flagged_positive": 0
+      },
+      {
+        "budget": 0.05,
+        "k": 6,
+        "precision": 0.6666666666666666,
+        "recall": 0.12121212121212122,
+        "flagged_positive": 4
+      },
+      {
+        "budget": 0.1,
+        "k": 12,
+        "precision": 0.6666666666666666,
+        "recall": 0.24242424242424243,
+        "flagged_positive": 8
+      }
+    ],
+    "per_horizon": {
+      "60": {
+        "n_test": 41,
+        "pos_test": 11,
+        "roc_auc": 0.7666666666666667,
+        "avg_precision": 0.48838514426749724,
+        "alert_budget": [
+          {
+            "budget": 0.01,
+            "k": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "flagged_positive": 0
+          },
+          {
+            "budget": 0.05,
+            "k": 2,
+            "precision": 0.5,
+            "recall": 0.09090909090909091,
+            "flagged_positive": 1
+          },
+          {
+            "budget": 0.1,
+            "k": 4,
+            "precision": 0.5,
+            "recall": 0.18181818181818182,
+            "flagged_positive": 2
+          }
+        ]
+      },
+      "300": {
+        "n_test": 39,
+        "pos_test": 11,
+        "roc_auc": 0.8863636363636365,
+        "avg_precision": 0.7439517553153917,
+        "alert_budget": [
+          {
+            "budget": 0.01,
+            "k": 1,
+            "precision": 1.0,
+            "recall": 0.09090909090909091,
+            "flagged_positive": 1
+          },
+          {
+            "budget": 0.05,
+            "k": 2,
+            "precision": 1.0,
+            "recall": 0.18181818181818182,
+            "flagged_positive": 2
+          },
+          {
+            "budget": 0.1,
+            "k": 4,
+            "precision": 0.75,
+            "recall": 0.2727272727272727,
+            "flagged_positive": 3
+          }
+        ]
+      },
+      "600": {
+        "n_test": 40,
+        "pos_test": 11,
+        "roc_auc": 0.7899686520376177,
+        "avg_precision": 0.602568832682469,
+        "alert_budget": [
+          {
+            "budget": 0.01,
+            "k": 1,
+            "precision": 0.0,
+            "recall": 0.0,
+            "flagged_positive": 0
+          },
+          {
+            "budget": 0.05,
+            "k": 2,
+            "precision": 0.5,
+            "recall": 0.09090909090909091,
+            "flagged_positive": 1
+          },
+          {
+            "budget": 0.1,
+            "k": 4,
+            "precision": 0.75,
+            "recall": 0.2727272727272727,
+            "flagged_positive": 3
+          }
+        ]
+      }
+    },
+    "leakage_probe": {
+      "shuffled_label_auc": 0.4545454545454546,
+      "max_single_feature_auc": 0.8011145942180424,
+      "single_feature_auc": {
+        "GPU_TEMP_last": 0.8011145942180424,
+        "GPU_TEMP_mean": 0.800417972831766,
+        "GPU_TEMP_slope": 0.5029606408916754,
+        "POWER_USAGE_last": 0.5154998258446535,
+        "MEMORY_TEMP_last": 0.5165447579240683
+      },
+      "leaks": false
+    }
+  },
+  "training_window": [
+    "2023-08-14T23:05:54.909622+08:00",
+    "2023-08-16T01:15:42.754304+08:00"
+  ],
+  "n_train": 276,
+  "n_test": 120,
+  "dataset_path": "/Users/cosmic/dev/@events/ai-eng-wf-hack-2026/hack/.meld/.worktrees/drv-jds1/src/gpusitter/app/fixtures/early_detection/features.csv",
+  "dataset_sha256": "91e3a4d358e2514c4c96c2c778a08e4342eb94c7347b4e26467b49517254c5cb",
+  "holdout_id": "fce4a1aa0bb0b960a385718a99a35172631d27a026c17dd1bb7357ec89f27eb0",
+  "created_at": "2023-08-15T00:00:00+08:00"
+}

@@ -253,17 +253,34 @@ def _monitor_feature_df():
     return pd.DataFrame(rows).sort_values("t_ref").reset_index(drop=True)
 
 
-def test_monitor_unavailable_without_incumbent(tmp_path, monkeypatch):
+def _disable_fixture(monkeypatch, tmp_path):
+    """Point the committed-demo-fixture fallback at empty paths.
+
+    The jds contract change: /api/monitor now falls back to a committed demo
+    fixture when the real artifacts are absent. To exercise the honest
+    ``available:false`` floor we must also remove the fixture — otherwise the
+    fallback (correctly) serves the demo.
+    """
+    monkeypatch.setattr(sim, "MONITOR_FIXTURE_DATA_PATH", str(tmp_path / "no_fixture.csv"))
+    monkeypatch.setattr(sim, "MONITOR_FIXTURE_REGISTRY_PATH", str(tmp_path / "no_fixture_reg"))
+
+
+def test_monitor_unavailable_when_all_artifacts_absent(tmp_path, monkeypatch):
+    # No real registry/data AND no committed fixture -> honest unavailable.
     monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(tmp_path / "empty_reg"))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(tmp_path / "missing.parquet"))
+    _disable_fixture(monkeypatch, tmp_path)
     r = client.get("/api/monitor")
     assert r.status_code == 200
     body = r.json()
     assert body["available"] is False
-    assert "incumbent" in body["reason"]
+    assert body.get("fixture") is None  # honest floor, not a degraded fixture render
+    assert "demo fixture" in body["reason"]
 
 
 def test_monitor_unavailable_without_dataset(tmp_path, monkeypatch):
-    # A registry WITH an incumbent but a missing feature table -> honest unavailable.
+    # A registry WITH an incumbent but a missing feature table AND no fixture ->
+    # honest unavailable (the real-artifact branch needs BOTH halves present).
     from gpusitter.detection.harness import CandidateSpec, ModelRegistry, run_round
 
     df = _monitor_feature_df()
@@ -275,9 +292,29 @@ def test_monitor_unavailable_without_dataset(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(reg_dir))
     monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(tmp_path / "missing.csv"))
+    _disable_fixture(monkeypatch, tmp_path)
     body = client.get("/api/monitor").json()
     assert body["available"] is False
-    assert "feature table not found" in body["reason"]
+
+
+def test_monitor_renders_off_droplet_from_committed_fixture():
+    # No monkeypatching: the real droplet artifacts (data/early_detection.parquet,
+    # models/early_detection) do NOT exist in the worktree, so the endpoint must
+    # serve the COMMITTED demo fixture and render the full monitor surface. This is
+    # the bead's load-bearing smoke (AC #1, #3, #5).
+    body = client.get("/api/monitor", params={"budget": 0.10}).json()
+    assert body["available"] is True
+    assert body["fixture"] is True, "off-droplet must serve the committed fixture"
+    assert "early-detection-eval.md" in body["fixture_note"], "fixture must be labeled illustrative"
+    assert body["model_version"] >= 1
+    assert body["n_onsets"] > 0
+    assert body["rows"], "per-row scores must be exposed to the dashboard"
+    row = body["rows"][0]
+    assert {"risk_score", "alert_flag", "model_version", "gpu", "t_ref"} <= set(row)
+    grid = body["budgets"][0]["grid"]["by_horizon"]
+    recalls = [grid[h]["recall"] for h in ("60", "300", "600")]
+    assert all(0.0 <= rcl <= 1.0 for rcl in recalls)
+    assert any(rcl > 0.0 for rcl in recalls), grid
 
 
 def test_monitor_returns_scores_and_miss_grid(tmp_path, monkeypatch):

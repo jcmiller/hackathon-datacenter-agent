@@ -121,3 +121,16 @@ uv run python scripts/eval_early_dataset.py --data data/early_detection.csv \
 ```
 
 Raw per-horizon/per-model metrics: `docs/early_detection_eval.json`.
+
+## Portable demo fixture (bead jds)
+
+The numbers above are the canonical real result. For a demo that renders the
+monitor surface **off the droplet** (no ~80 GB trace, no
+`data/early_detection.parquet`), a small **synthetic, illustrative** fixture +
+prebuilt registry ships in-tree at
+`src/gpusitter/app/fixtures/early_detection/` and is served by `/api/monitor`
+when the real artifacts are absent (payload marked `fixture:true`). Its numbers
+are **not** a Kalos result — they exist only to exercise the per-row scoring,
+alert-budget, and horizon-grid miss-detector shapes. Regenerate with
+`python scripts/build_monitor_fixture.py`. The real held-out evaluation here
+stays the single source of truth.
