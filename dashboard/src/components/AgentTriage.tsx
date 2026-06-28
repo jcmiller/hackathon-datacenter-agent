@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, FeedbackOutcome, Incident, ModelCard } from "../types";
+import type { AgentEvent, Incident, ModelCard } from "../types";
 
 const DISP_META: Record<string, { label: string; cls: string }> = {
   PAGE_TECHNICIAN:  { label: "Page Technician",   cls: "disp-crit" },
@@ -18,20 +18,16 @@ export function AgentTriage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [feedback, setFeedback] = useState<FeedbackOutcome | null>(null);
-  const [feedbackSent, setFeedbackSent] = useState(false);
   const [model, setModel] = useState<ModelCard | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Fetch model card on mount
   useEffect(() => {
     fetch("/api/model").then(r => r.json()).then(d => {
       if (d.model) setModel(d.model);
     }).catch(() => {});
   }, []);
 
-  // Elapsed timer while agent is running
   useEffect(() => {
     if (!loading) { setElapsed(0); return; }
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -41,8 +37,6 @@ export function AgentTriage({
   useEffect(() => {
     setShown([]);
     setError(null);
-    setFeedback(null);
-    setFeedbackSent(false);
     abortRef.current?.abort();
     if (!incidentId || !incidentData) return;
 
@@ -75,6 +69,14 @@ export function AgentTriage({
               try {
                 const ev: AgentEvent = JSON.parse(line.slice(6));
                 setShown((s) => [...s, ev]);
+                // Auto-save outcome to memory when triage completes — no user prompt needed
+                if (ev.type === "disposition") {
+                  fetch("/api/feedback", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ incident_id: incidentId, outcome: "auto" }),
+                  }).catch(() => {});
+                }
               } catch {}
             }
           }
@@ -85,7 +87,6 @@ export function AgentTriage({
         }
       } finally {
         setLoading(false);
-        // Refresh model card after triage completes (train_and_validate may have promoted)
         fetch("/api/model").then(r => r.json()).then(d => {
           if (d.model) setModel(d.model);
         }).catch(() => {});
@@ -95,31 +96,18 @@ export function AgentTriage({
     return () => ctrl.abort();
   }, [incidentId, incidentData]);
 
+  // Scroll to bottom as events arrive
   useEffect(() => {
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight });
   }, [shown]);
 
-  const sendFeedback = async (outcome: FeedbackOutcome) => {
-    if (!incidentId || feedbackSent) return;
-    setFeedback(outcome);
-    try {
-      await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ incident_id: incidentId, outcome }),
-      });
-      setFeedbackSent(true);
-    } catch {}
-  };
-
-  const visible = shown.filter((e) => e.type !== "disposition");
+  const allEvents = shown.filter((e) => e.type !== "disposition");
   const disposition = shown.find((e) => e.type === "disposition");
-  const lastVisible = visible[visible.length - 1];
+  const lastEvent = allEvents[allEvents.length - 1];
 
-  const awaitingTool = loading && lastVisible?.type === "tool_call";
-  const thinking     = loading && (!lastVisible || lastVisible.type === "observation" || lastVisible.type === "file_update");
+  const awaitingTool = loading && lastEvent?.type === "tool_call";
   const activeTool   = awaitingTool
-    ? (lastVisible as Extract<AgentEvent, { type: "tool_call" }>).tool
+    ? (lastEvent as Extract<AgentEvent, { type: "tool_call" }>).tool
     : null;
 
   const dispMeta = disposition?.type === "disposition"
@@ -135,7 +123,6 @@ export function AgentTriage({
         </span>
       </div>
 
-      {/* Model card — always visible when a model exists */}
       {model && (
         <div className="model-card">
           <span className="model-label">predictor</span>
@@ -146,7 +133,6 @@ export function AgentTriage({
         </div>
       )}
 
-      {/* Phase status bar */}
       {loading && (
         <div className={`triage-status ${awaitingTool ? "status-tool" : "status-think"}`}>
           {awaitingTool ? (
@@ -154,7 +140,7 @@ export function AgentTriage({
               <span className="spin">⟳</span>
               <span>running <strong>{activeTool}</strong></span>
             </>
-          ) : thinking && shown.length === 0 ? (
+          ) : shown.length === 0 ? (
             <>
               <ThinkingDots />
               <span>connecting to Gemini 2.5 Flash</span>
@@ -172,15 +158,15 @@ export function AgentTriage({
         {!incidentId ? (
           <div className="empty">select an incident — the agent will triage it live</div>
         ) : (
-          <>
-            <div className="stream" ref={streamRef}>
-              {error && (
-                <div className="empty" style={{ color: "var(--crit)" }}>{error}</div>
-              )}
-              {visible.map((ev, i) => (
-                <EventLine key={i} ev={ev} inFlight={i === visible.length - 1 && awaitingTool} />
-              ))}
-            </div>
+          <div className="stream" ref={streamRef}>
+            {error && (
+              <div className="empty" style={{ color: "var(--crit)" }}>{error}</div>
+            )}
+            {allEvents.map((ev, i) => (
+              <EventLine key={i} ev={ev} inFlight={i === allEvents.length - 1 && awaitingTool} />
+            ))}
+
+            {/* Disposition renders inline in the scroll area — thinking steps stay visible above */}
             {disposition && dispMeta && disposition.type === "disposition" && (
               <div className={`disp fade-up ${dispMeta.cls}`}>
                 <div className="disp-header">
@@ -188,28 +174,12 @@ export function AgentTriage({
                   {disposition.ticket && (
                     <span className="ticket">▸ {disposition.ticket}</span>
                   )}
+                  <span className="disp-saved">✎ saved to memory</span>
                 </div>
                 <div className="action">{disposition.action}</div>
-
-                {/* Outcome feedback */}
-                <div className="feedback-row">
-                  {feedbackSent ? (
-                    <span className="feedback-sent">
-                      {feedback === "confirmed" ? "✓ Confirmed" : feedback === "false_alarm" ? "✗ False alarm logged" : "? Noted as uncertain"}
-                      {" "}— outcome saved to memory
-                    </span>
-                  ) : (
-                    <>
-                      <span className="feedback-label">Was this correct?</span>
-                      <button className="fb-btn fb-ok"    onClick={() => sendFeedback("confirmed")}>✓ Confirmed</button>
-                      <button className="fb-btn fb-bad"   onClick={() => sendFeedback("false_alarm")}>✗ False alarm</button>
-                      <button className="fb-btn fb-unsure" onClick={() => sendFeedback("uncertain")}>? Uncertain</button>
-                    </>
-                  )}
-                </div>
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </section>

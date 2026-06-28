@@ -51,8 +51,6 @@ export interface Meta {
   source: string;
 }
 
-export type FeedbackOutcome = "confirmed" | "false_alarm" | "uncertain";
-
 export interface ModelCard {
   version: number;
   model_type: string;
