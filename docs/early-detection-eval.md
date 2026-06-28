@@ -1,12 +1,13 @@
 # Early-detection dataset — evaluation & go/no-go verdict
 
-**Bead:** aieng26hack-5fq.lys · **Date:** 2026-06-28 · **Data:** real Kalos
-telemetry (droplet `134.199.208.214`, `data/acme-util` LFS cache).
+**Bead:** aieng26hack-5fq.lys · **Updated:** 2026-06-28 · **Data:** real Kalos
+telemetry (droplet `134.199.208.214`, `data/acme-util` LFS cache). Numbers
+regenerated under the canonical `uv` env (scikit-learn 1.9.0).
 
-This is the honest answer to the bead's central question: *does Kalos telemetry
-carry usable pre-Xid warning signal?* Short version: **only weak, marginally
-above-chance signal — NO-GO for a standalone predictor, but the dataset +
-harness work end-to-end and are the reusable deliverable.**
+Honest answer to the bead's central question — *does Kalos telemetry carry
+usable pre-Xid warning signal?* **A weak but real, leakage-free linear signal
+(held-out ROC-AUC ~0.64–0.65) — not enough for a standalone reliable predictor
+(NO-GO), but the dataset + harness are the reusable deliverable (GO).**
 
 ## How it was built
 
@@ -33,75 +34,76 @@ PYTHONPATH=src python scripts/build_early_dataset.py \
   explicit (`present`/`coverage`); never zero-filled. Rows with no telemetry
   coverage in any metric are dropped.
 - **Result:** **6,978 rows · 1,965 positive · 685 GPUs.** Per horizon: 655 pos /
-  1,671 neg. (Most cluster-control candidates fell on idle windows and were
-  dropped by the coverage filter, leaving a near-balanced same-GPU-dominated
-  set.)
+  1,671 neg.
 
 The cached table is `data/early_detection.csv` on the droplet (gitignored here;
-datasets are never committed). Rebuild is run-once; experiments read the cache.
+datasets are never committed). Build is run-once; experiments read the cache.
 
-## Held-out metrics — time-ordered, GPU-grouped split
+## Held-out metrics — strict time-ordered split
 
-Split: GPUs ordered by earliest `t_ref`; earliest 70% (by rows) -> train, rest
--> test. **GPU-atomic**, so a positive and its paired same-GPU negative can never
-straddle the split — the leak that inflates naive AUC. Per horizon, recall is the
-fraction of real faults catchable with that lead time at the alert budget.
+Split: a single `t_ref` threshold per horizon — earliest ~70% by time -> train,
+the rest -> test, with **`max(train.t_ref) < min(test.t_ref)`**. Every training
+point is strictly in the past of every test point, so the model can never see
+future telemetry. (The first submission bucketed by GPU and filled train by row
+count, which let a train GPU's later rows post-date test rows — *not* actually
+time-ordered; fixed, with a regression test in `tests/test_eval_early_dataset.py`.)
+Per horizon: train 1,578 (522 pos) / test 748 (133 pos, base rate **0.178**). The
+no-signal baseline is the same model retrained on shuffled labels, **averaged
+over 8 shuffles** (a single shuffle swung 0.39–0.58 on this small test set).
 
-| Horizon | model | n_test | pos_test | ROC-AUC | AP | permuted-AUC | recall@5% | prec@5% | recall@10% | prec@10% |
+| Horizon | model | n_test | pos_test | ROC-AUC | AP | permuted-AUC (×8) | recall@5% | prec@5% | recall@10% | prec@10% |
 |--:|:--|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| 60s  | logreg | 697 | 319 | 0.553 | 0.483 | 0.470 | 0.047 | 0.429 | 0.107 | 0.486 |
-| 60s  | hgb    | 697 | 319 | **0.573** | 0.529 | 0.474 | 0.056 | 0.514 | 0.122 | 0.557 |
-| 300s | logreg | 697 | 319 | 0.549 | 0.474 | 0.475 | 0.041 | 0.371 | 0.094 | 0.429 |
-| 300s | hgb    | 697 | 319 | **0.573** | 0.507 | 0.516 | 0.047 | 0.429 | 0.125 | 0.571 |
-| 600s | logreg | 697 | 319 | 0.556 | 0.492 | 0.508 | 0.053 | 0.486 | 0.103 | 0.471 |
-| 600s | hgb    | 697 | 319 | 0.558 | 0.489 | 0.507 | 0.041 | 0.371 | 0.100 | 0.457 |
-
-Test base rate ≈ 0.458, so AP ≈ 0.47–0.53 is **at or barely above the prior** —
-the ranking is close to random. Alert-budget precision at 5% (0.37–0.51) ≈ base
-rate: flagging the top-5%-scored points catches faults no better than chance.
+| 60s  | logreg | 748 | 133 | **0.650** | 0.235 | 0.504 | 0.030 | 0.108 | 0.083 | 0.147 |
+| 60s  | hgb    | 748 | 133 | 0.587 | 0.259 | 0.521 | 0.090 | 0.324 | 0.173 | 0.307 |
+| 300s | logreg | 748 | 133 | **0.653** | 0.251 | 0.540 | 0.045 | 0.162 | 0.128 | 0.227 |
+| 300s | hgb    | 748 | 133 | 0.579 | 0.228 | 0.492 | 0.075 | 0.270 | 0.135 | 0.240 |
+| 600s | logreg | 748 | 133 | **0.641** | 0.240 | 0.490 | 0.045 | 0.162 | 0.098 | 0.173 |
+| 600s | hgb    | 748 | 133 | 0.560 | 0.222 | 0.477 | 0.083 | 0.297 | 0.158 | 0.280 |
 
 ## Reading the numbers
 
-1. **Honest AUC is 0.55–0.57 everywhere.** Both a linear (logreg) and a
-   non-linear (HistGradientBoosting) model land in the same narrow band. That is
-   weak: 0.5 is a coin flip, ~0.7 is the usual "worth shipping" floor.
-2. **Lift over the no-signal control is +0.04 to +0.10 AUC.** The permutation
-   baseline (same model, shuffled train labels) sits at 0.47–0.52. The model
-   beats its own no-signal control only slightly — and at 300s/600s logreg is
-   essentially tied with it. The signal is real but small.
-3. **Flat across horizons.** AUC does not improve at any lead time (60s ≈ 300s ≈
-   600s). There is no developing precursor that sharpens as the fault nears; the
-   weak separability is horizon-insensitive, consistent with small static
-   differences rather than a building warning.
-4. **The leakage demonstration (headline).** The *leaky* stratified-random split
-   — where a GPU's positive and its pre-event negative can land on opposite sides
-   — scores **HGB AUC 0.873 / logreg 0.673**. Against the honest **0.57**, that
-   is ~0.30 AUC of apparent "predictive power" that is **pairing leakage, not
-   foresight.** This is why the GPU-grouped split is mandatory and why quick
-   earlier baselines (~0.61 on a tiny random test) overstated the case.
-
-This corroborates the independent 6xk characterization (GPU_TEMP/POWER median
-delta ≈ 0, rising≈falling in the 5 min pre-onset) and the lys design's note that
-the first droplet run showed weak/noisy lift.
+1. **A real, weak, *linear* signal.** Logistic regression holds **ROC-AUC
+   0.64–0.65 at every horizon**, a consistent **+0.11 to +0.15 over the averaged
+   no-signal baseline (~0.50)**. It is small (0.5 = coin flip, ~0.8 = the usual
+   "ship it" floor) but it is genuine and reproducible, not noise.
+2. **The signal is leakage-free.** Logreg honest **0.65** ≈ logreg on the *leaky*
+   stratified-random split **0.673** — almost no inflation. So the linear signal
+   survives a strict temporal split; it is foresight, not pos/neg pairing.
+3. **HGB's apparent power is mostly leakage.** HistGradientBoosting scores
+   **0.873 leaky** but only **0.56–0.59 honest** — ~0.30 AUC evaporates under the
+   time split. Under temporal covariate shift the boosted trees overfit the
+   train-period distribution; the durable signal is the linear part.
+4. **Ranking is only modestly better than the prior.** AP 0.22–0.26 vs a 0.178
+   base rate (~1.3–1.5×). At a 10% alert budget, HGB catches ~16–17% of faults at
+   ~28–31% precision (~1.6–1.7× base rate); logreg is higher-AUC but flatter at
+   the top of the ranking. Useful as a weak prior, not a precise alarm.
+5. **Flat across horizons.** AUC does not sharpen from 600s -> 60s; there is no
+   accelerating precursor in these features — the weak separability is roughly
+   static in the 10 minutes before onset, consistent with the 6xk finding
+   (GPU_TEMP/POWER median delta ≈ 0 pre-onset).
 
 ## Verdict
 
-**NO-GO for a standalone, reliable pre-Xid predictor** from these windowed
-DCGM-utilization features. Under honest, leakage-free evaluation the signal is
-weak (ROC-AUC ~0.55–0.57, only marginally above a no-signal baseline) and does
-not strengthen toward the event. Treating top-scored GPUs as imminent-failure
-alerts would fire at roughly the base rate — not actionable on its own.
+**NO-GO for a standalone, reliable pre-Xid predictor** on these windowed
+DCGM-utilization features. The best honest AUC (~0.65, logreg) is well below a
+deployable bar, alert-budget precision is only ~1.5–1.7× the base rate, and the
+non-linear model barely beats chance out-of-time. Treating top-scored GPUs as
+imminent-failure alarms would fire mostly at the base rate — not trustworthy on
+its own.
+
+**But the signal is weak-yet-real and leakage-free**, which is a more useful
+finding than "no signal": the linear model extracts ~0.65 AUC that survives a
+strict temporal split. That makes it a plausible *contributing input* to an
+ensemble (alongside RCA / job-context signals) and a baseline to beat by adding
+the metrics excluded here — SM_ACTIVE via a pod/IP alias map, MEM_CLOCK,
+ECC/retired-page counters if present — widening the lookback, and joining
+NODE_FAIL / `fail_time` events. Those are out of lys scope.
 
 **GO for the dataset + harness as infrastructure.** The cache-safe streaming
-builder and the leakage-aware, time-ordered, permutation-controlled evaluator
-run end-to-end on the real ~76 GB Kalos trace and produce reproducible,
-honestly-measured numbers. That pipeline — not a claim of predictive power — is
-the deliverable, and it is what the downstream self-improving classifier
-(glf→rnh→8co) builds on. Plausible paths to a stronger signal (out of lys scope):
-add metrics excluded here (SM_ACTIVE via a pod/IP alias map, MEM_CLOCK,
-ECC/retired-page counters if present), widen the lookback, and join NODE_FAIL /
-`fail_time` events — but on the current feature set the warning signal is weak,
-measured honestly.
+builder and the strict-time-ordered, permutation-controlled evaluator run
+end-to-end on the real ~76 GB Kalos trace and produce reproducible, honestly
+measured numbers. That pipeline — not a claim of strong predictive power — is the
+deliverable the self-improving classifier chain (glf→rnh→8co) builds on.
 
 ## Reproduce
 
@@ -113,7 +115,9 @@ PYTHONPATH=src python scripts/build_early_dataset.py --repo-dir data/acme-util \
     --horizons 60 300 600 --lookback 600 --gpu-batch-size 150 \
     --control-gpus <ids> --out data/early_detection.parquet
 
-# evaluation (reads the cached table; seconds):
-PYTHONPATH=src python scripts/eval_early_dataset.py --data data/early_detection.csv \
+# evaluation (reads the cached table; seconds; run under uv for canonical env):
+uv run python scripts/eval_early_dataset.py --data data/early_detection.csv \
     --out-json data/early_detection_eval.json --out-md docs/early-detection-eval.md
 ```
+
+Raw per-horizon/per-model metrics: `docs/early_detection_eval.json`.
