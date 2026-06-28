@@ -36,6 +36,43 @@ incident fires
 3. **Disposition classifier** — trains from incident 1; version increments whenever val AUC improves; AUC shown as `—` until enough varied cases accumulate for a holdout
 4. **Outcome-enriched embeddings** — auto-confirmed outcomes re-embed the SOP entry so future semantic search finds confirmed hardware faults vs false alarms
 
+## Gemini 3.5 Flash — Computer Use
+
+> **This is the stretch feature for the Gemini $5k prize.**
+
+The `🖥 Computer Use` button in the dashboard header launches an autonomous remediation session powered by [Gemini 3.5 Flash's built-in computer use capability](https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.5).
+
+### What it does
+
+1. A headless Chromium browser (Playwright) loads the live GPUSitter dashboard
+2. A screenshot is captured and sent to `gemini-3.5-flash` with the `ComputerUse(environment=ENVIRONMENT_BROWSER)` tool enabled
+3. The model **sees the screen** — it reads incident Xid codes, severity badges, GPU node IDs, and telemetry — and decides which incident is most critical
+4. The model emits **native UI actions** (clicks, scrolls) as structured `function_call` parts
+5. Each action is executed on the live browser page; a fresh screenshot is taken and fed back to the model
+6. This loops for up to 5 turns, streaming every screenshot, action, and reasoning step as SSE to the frontend
+7. The frontend modal renders the live screenshot with **red dot overlays** at each click coordinate, plus a turn-labeled action log
+
+### What the model reasons about
+
+From a single screenshot, Gemini 3.5 Flash correctly:
+- Identifies incident cards by Xid code and severity color
+- Reads GPU node IDs and correlation counts from the feed
+- Navigates to the most critical incident autonomously
+
+### Code
+
+| File | Role |
+|------|------|
+| `src/gpusitter/app/computer_use.py` | Playwright loop + Gemini ComputerUse API + action executor |
+| `src/gpusitter/app/sim.py` | `POST /api/computer-use` SSE endpoint |
+| `dashboard/src/components/ComputerUse.tsx` | Screenshot panel with click overlays + action log |
+
+### Managed Agents (AGENTS.md / SKILL.md)
+
+`AGENTS.md` and `SKILL.md` in the repo root declare GPUSitter's persona, tools, memory schema, and skills in the format expected by [Google's Antigravity hosted agent infrastructure](https://antigravity.google/download). This qualifies the project for the **Managed Agents** requirement of the Gemini prize.
+
+---
+
 ## Architecture (`src/gpusitter/` package)
 
 | Subpackage / module | Responsibility |
@@ -47,15 +84,17 @@ incident fires
 | `tools.py` | `get_telemetry`, `check_degradation_trend`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution` (stores metrics), `train_and_validate` |
 | `priors.py` | GPU-failure domain priors injected into the agent system prompt |
 | `agent.py` | Google ADK + Gemini 2.5 Flash: 7-step ReAct triage loop, yields SSE events |
-| `sim.py` | FastAPI: `/api/incidents` (SSE stream), `/api/triage` (streaming agent), `/api/model` (model card), `/api/feedback` (outcome recording); serves compiled React dashboard |
+| `computer_use.py` | Gemini 3.5 Flash + `ComputerUse(ENVIRONMENT_BROWSER)`: Playwright screenshot loop, action executor, SSE event stream |
+| `sim.py` | FastAPI: all API endpoints; serves compiled React dashboard |
 
 ## API
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace |
-| `/api/triage` | POST SSE | Stream Gemini agent events for one incident |
+| `/api/triage` | POST SSE | Stream Gemini 2.5 Flash agent events for one incident |
 | `/api/model` | GET | Current predictor: version, model_type, val_auc, n_samples |
 | `/api/feedback` | POST | Record outcome `{incident_id, outcome}` → re-embeds SOP entry |
+| `/api/computer-use` | POST SSE | Gemini 3.5 Flash computer use remediation session |
 
 ## Self-improvement observability
 
@@ -84,8 +123,9 @@ No big data needed locally — the app serves fixture incidents from `src/gpusit
 - ✅ Disposition classifier — trains from incident 1; promotes on AUC improvement; model card in UI
 - ✅ Outcome feedback — auto-saves after every triage; re-embeds SOP entry with outcome context
 - ✅ `/api/model` + `/api/feedback` REST endpoints
+- ✅ **Gemini 3.5 Flash computer use** — Playwright screenshot loop + `ComputerUse(ENVIRONMENT_BROWSER)` + live action execution; streams screenshots + actions + reasoning to the UI
+- ✅ **AGENTS.md + SKILL.md** — Managed Agents persona and skill definitions for the Antigravity API
 - 🚧 Xid-event-driven real-time incident ingestion (currently replays trace CSV)
-- ⏭️ Stretch: Managed-Agents actuation, MCP tool exposure, model routing by incident type
 ## Data
 
 The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs directly at query time (`data/acme-util/data/utilization/kalos/*.csv`). See **[docs/DATA.md](docs/DATA.md)** for schema details and the AcmeTrace reality check.
