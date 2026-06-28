@@ -294,6 +294,41 @@ def test_model_monitor_fixture_parity_off_droplet(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/predict-gpu — per-GPU failure-likelihood (scope A)
+# ---------------------------------------------------------------------------
+
+
+def test_predict_gpu_scores_real_telemetry_window():
+    """A GPU with a bundled telemetry window is scored by the real incumbent."""
+    r = client.post("/api/predict-gpu", json={"incident_id": "INC-001"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is True
+    assert 0.0 <= body["likelihood"] <= 1.0
+    feats = body["features"]
+    for name in (
+        "GPU_TEMP_last",
+        "GPU_TEMP_mean",
+        "GPU_TEMP_slope",
+        "POWER_USAGE_last",
+        "MEMORY_TEMP_last",
+    ):
+        assert name in feats
+    # MEMORY_TEMP is an honest proxy for GPU_TEMP (no memory series exists).
+    assert feats["MEMORY_TEMP_last"] == feats["GPU_TEMP_last"]
+    assert body["label"] in {"alert", "watch", "ok"}
+    assert body["note"]
+
+
+def test_predict_gpu_unknown_incident_is_unavailable():
+    r = client.post("/api/predict-gpu", json={"incident_id": "NOPE-999"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert "telemetry" in body["reason"]
+
+
+# ---------------------------------------------------------------------------
 # /api/learning-curve — self-improving classifier learning curve artifact
 # ---------------------------------------------------------------------------
 

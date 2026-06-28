@@ -3,7 +3,10 @@
 .app {
   height: 100vh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* top bar · 3-column grid (fills) · optional learning-curve band.
+     The third (auto) row keeps the curve in normal flow so it never
+     overlaps the columns; when hidden it collapses to zero height. */
+  grid-template-rows: auto 1fr auto;
   gap: 10px;
   padding: 10px;
 }
@@ -365,6 +368,37 @@
 .spark .val {
   font-size: 18px;
   font-weight: 600;
+}
+
+/* per-GPU failure-likelihood badge */
+.predict {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.predict-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.predict-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--fg-faint);
+}
+.predict-val {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.predict-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.predict-note {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--fg-faint);
 }
 
 /* ---- agent triage ---- */

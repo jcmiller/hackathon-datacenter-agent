@@ -29,6 +29,7 @@ export function App() {
   // Collapsible panels state
   const [feedCollapsed, setFeedCollapsed] = useState(false);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
+  const [curveCollapsed, setCurveCollapsed] = useState(false);
   const [cuOpen, setCuOpen] = useState(false);
 
   // initial load — load initial topology and agent run definitions
@@ -130,6 +131,8 @@ export function App() {
         setFeedCollapsed={setFeedCollapsed}
         triageCollapsed={triageCollapsed}
         setTriageCollapsed={setTriageCollapsed}
+        curveCollapsed={curveCollapsed}
+        setCurveCollapsed={setCurveCollapsed}
         onComputerUse={() => setCuOpen(true)}
       />
       {cuOpen && <ComputerUsePanel onClose={() => setCuOpen(false)} />}
@@ -153,7 +156,7 @@ export function App() {
             selectedGpu={selectedGpuId}
             onSelectGpu={selectGpu}
           />
-          <TelemetryStrip tele={tele} />
+          <TelemetryStrip tele={tele} incidentId={selectedId} />
         </div>
         {!triageCollapsed && (
           <AgentTriage
@@ -162,7 +165,7 @@ export function App() {
           />
         )}
       </div>
-      <LearningCurve />
+      {!curveCollapsed && <LearningCurve />}
     </div>
   );
 }

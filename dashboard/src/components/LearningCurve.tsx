@@ -27,7 +27,6 @@ const xVersion = (i: number, n: number) =>
 
 export function LearningCurve() {
   const [data, setData] = useState<LearningCurveData | null>(null);
-  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     fetch("/api/learning-curve")
@@ -60,24 +59,14 @@ export function LearningCurve() {
 
   return (
     <section className="panel lc-panel">
-      <button
-        type="button"
-        className="panel-title lc-header"
-        aria-expanded={!collapsed}
-        onClick={() => setCollapsed((c) => !c)}
-      >
-        <span>
-          <span className="lc-chevron">{collapsed ? "▸" : "▾"}</span>
-          Self-improving predictor · learning curve
-        </span>
+      <div className="panel-title">
+        <span>Self-improving predictor · learning curve</span>
         <span className="faint">
           {data.n_promotions} promotions · held-out {data.primary_metric}
         </span>
-      </button>
+      </div>
 
-      {!collapsed && (
-        <>
-          <div className="lc-chart">
+      <div className="lc-chart">
             <svg viewBox={`0 0 ${W} ${H}`} className="lc-svg" preserveAspectRatio="xMidYMid meet">
               {/* y gridlines + labels */}
               {yTicks.map((t) => (
@@ -205,8 +194,6 @@ export function LearningCurve() {
               <span className="lc-badge lc-badge-honest">synthetic demo data · real fits &amp; held-out ROC-AUC</span>
             </div>
           </div>
-        </>
-      )}
     </section>
   );
 }

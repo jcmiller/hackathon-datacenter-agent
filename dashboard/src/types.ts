@@ -148,6 +148,25 @@ export interface LearningCurveData {
   };
 }
 
+// POST /api/predict-gpu — per-GPU failure-likelihood prediction for the selected
+// incident's telemetry window. Either an available prediction or a reason it isn't.
+export type PredictGpu =
+  | {
+      available: true;
+      likelihood: number;
+      threshold: number;
+      label: "alert" | "watch" | "ok";
+      features: Record<string, number>;
+      model: {
+        version: number;
+        model_type: string;
+        val_auc: number;
+        fixture: boolean;
+      };
+      note: string;
+    }
+  | { available: false; reason: string };
+
 // Agent reasoning stream events
 export type AgentEvent =
   | { type: "user"; text: string }

@@ -8,6 +8,8 @@ export function TopBar({
   setFeedCollapsed,
   triageCollapsed,
   setTriageCollapsed,
+  curveCollapsed,
+  setCurveCollapsed,
   onComputerUse,
 }: {
   meta: Meta | null;
@@ -17,6 +19,8 @@ export function TopBar({
   setFeedCollapsed: (c: boolean) => void;
   triageCollapsed: boolean;
   setTriageCollapsed: (c: boolean) => void;
+  curveCollapsed: boolean;
+  setCurveCollapsed: (c: boolean) => void;
   onComputerUse?: () => void;
 }) {
   const active = incidents.filter((i) => i.state === "triaging").length;
@@ -69,6 +73,22 @@ export function TopBar({
             }}
           >
             {triageCollapsed ? "Show Triage" : "Hide Triage"}
+          </button>
+          <button
+            onClick={() => setCurveCollapsed(!curveCollapsed)}
+            style={{
+              background: curveCollapsed ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.15)',
+              color: curveCollapsed ? '#64748b' : '#a5b4fc',
+              border: '1px solid rgba(255,255,255,0.08)',
+              padding: '4px 10px',
+              borderRadius: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              outline: 'none'
+            }}
+          >
+            {curveCollapsed ? "Show Predictor" : "Hide Predictor"}
           </button>
           {onComputerUse && (
             <button

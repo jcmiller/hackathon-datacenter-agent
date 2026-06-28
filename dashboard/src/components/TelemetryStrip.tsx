@@ -1,4 +1,5 @@
-import type { Point, TelemetryWindow } from "../types";
+import { useEffect, useState } from "react";
+import type { Point, PredictGpu, TelemetryWindow } from "../types";
 
 function Sparkline({
   points,
@@ -50,7 +51,68 @@ function lastVal(points: Point[]): number | null {
   return null;
 }
 
-export function TelemetryStrip({ tele }: { tele: TelemetryWindow | null }) {
+const LABEL_VAR: Record<"alert" | "watch" | "ok", string> = {
+  alert: "var(--crit)",
+  watch: "var(--warn)",
+  ok: "var(--ok)",
+};
+
+function FailureBadge({ incidentId }: { incidentId: string }) {
+  const [pred, setPred] = useState<PredictGpu | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPred(null);
+    fetch("/api/predict-gpu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ incident_id: incidentId }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`predict-gpu ${res.status}`);
+        return res.json() as Promise<PredictGpu>;
+      })
+      .then((p) => {
+        if (!cancelled) setPred(p);
+      })
+      .catch(() => {
+        if (!cancelled) setPred(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [incidentId]);
+
+  // Render nothing until we have an available prediction — never a fake number.
+  if (!pred || !pred.available) return null;
+
+  const color = LABEL_VAR[pred.label];
+  return (
+    <div className="predict">
+      <div className="predict-row">
+        <span className="predict-label">FAILURE LIKELIHOOD</span>
+        <span className="predict-val" style={{ color }}>
+          {pred.likelihood.toFixed(2)}
+        </span>
+        <span className="predict-tag" style={{ color }}>
+          ⚠ {pred.label.toUpperCase()}
+        </span>
+      </div>
+      <div className="predict-note">
+        {pred.note} · model v{pred.model.version} · AUC{" "}
+        {pred.model.val_auc.toFixed(3)}
+      </div>
+    </div>
+  );
+}
+
+export function TelemetryStrip({
+  tele,
+  incidentId,
+}: {
+  tele: TelemetryWindow | null;
+  incidentId: string | null;
+}) {
   const fields = [
     {
       key: "power" as const,
@@ -80,7 +142,9 @@ export function TelemetryStrip({ tele }: { tele: TelemetryWindow | null }) {
       {!tele ? (
         <div className="empty">select an incident to inspect its GPU telemetry</div>
       ) : (
-        <div className="tele">
+        <>
+          {incidentId && <FailureBadge incidentId={incidentId} />}
+          <div className="tele">
           {fields.map((f) => {
             const pts = tele.series[f.key];
             const v = lastVal(pts);
@@ -97,7 +161,8 @@ export function TelemetryStrip({ tele }: { tele: TelemetryWindow | null }) {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
     </section>
   );

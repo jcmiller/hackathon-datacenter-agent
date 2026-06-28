@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -310,6 +311,90 @@ def get_monitor(budget: float | None = None, horizon: float | None = None):
     if is_fixture:
         report["fixture_note"] = fixture_note
     return report
+
+
+_INCIDENT_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _telemetry_window(incident_id: str) -> dict | None:
+    """Read the same bundled telemetry window the dashboard fetches for this GPU."""
+    # incident_id comes from the request body and is used to build a file path,
+    # so reject anything outside a strict allowlist to prevent path traversal.
+    if not _INCIDENT_ID_RE.fullmatch(incident_id):
+        return None
+    path = _fixtures_dir / "telemetry" / f"{incident_id}.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def _series_values(series: dict, key: str) -> list[float]:
+    """Non-null values of a telemetry series (Point = [t, value|null])."""
+    return [v for _t, v in series.get(key, []) if v is not None]
+
+
+def _derive_features(series: dict) -> dict[str, float]:
+    """Map each feature name the card may ask for to its window-derived value."""
+    import numpy as np
+
+    temp = _series_values(series, "temp")
+    power = _series_values(series, "power")
+    gpu_temp_last = temp[-1]
+    return {
+        "GPU_TEMP_last": gpu_temp_last,
+        "GPU_TEMP_mean": float(np.mean(temp)),
+        "GPU_TEMP_slope": float(np.polyfit(range(len(temp)), temp, 1)[0]),
+        "POWER_USAGE_last": power[-1],
+        # No memory_temp series exists; GPU_TEMP is a strongly-correlated proxy.
+        "MEMORY_TEMP_last": gpu_temp_last,
+    }
+
+
+@app.post("/api/predict-gpu")
+def predict_gpu(body: dict):
+    """Score the selected GPU's real telemetry window with the incumbent estimator.
+
+    Reads the same bundled telemetry window the dashboard loads, derives the card's
+    5 features (MEMORY_TEMP honestly proxied from GPU_TEMP), and calls the real
+    sklearn ``predict_proba``. Returns ``available:false`` honestly when there is no
+    telemetry window or no trained model.
+    """
+    incident_id = body.get("incident_id", "")
+    window = _telemetry_window(incident_id)
+    if window is None:
+        return {"available": False, "reason": "no telemetry window for this GPU"}
+
+    resolved = _resolve_monitor_registry()
+    if resolved is None:
+        return {"available": False, "reason": "no trained model"}
+    registry, _data_path, is_fixture, _fixture_note = resolved
+    card = registry.incumbent
+
+    derived = _derive_features(window["series"])
+    unknown = [f for f in card.features if f not in derived]
+    if unknown:
+        return {"available": False, "reason": f"cannot derive features: {unknown}"}
+
+    features = {f: derived[f] for f in card.features}
+    estimator = registry.load_estimator()
+    likelihood = float(estimator.predict_proba([[features[f] for f in card.features]])[0, 1])
+    label = "alert" if likelihood >= 0.66 else "watch" if likelihood >= 0.40 else "ok"
+
+    return {
+        "available": True,
+        "likelihood": likelihood,
+        "threshold": 0.5,
+        "label": label,
+        "features": features,
+        "model": {
+            "version": card.version,
+            "model_type": card.model_type,
+            "val_auc": round(card.primary_value, 3),
+            "fixture": is_fixture,
+        },
+        "note": "MEMORY_TEMP approximated from GPU_TEMP; model trained on demo fixture data",
+    }
 
 
 @app.post("/api/feedback")
