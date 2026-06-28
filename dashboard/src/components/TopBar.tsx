@@ -31,7 +31,7 @@ export function TopBar({
     <header className="panel topbar">
       <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span>
-          GPU<span className="dot">·</span>SITTER
+          GPU<span className="dot">·</span>CLUSTER DASHBOARD
         </span>
         <span className="dim" style={{ fontWeight: 400 }}>
           on-call RCA
@@ -73,6 +73,7 @@ export function TopBar({
           {onComputerUse && (
             <button
               onClick={onComputerUse}
+              title="GPU Sitter — powered by Gemini 3.5 Flash Computer Use. Launches a headless browser, takes live screenshots of this dashboard, and uses the ComputerUse(ENVIRONMENT_BROWSER) tool to autonomously read incident data and navigate the UI."
               style={{
                 background: 'rgba(16,185,129,0.15)',
                 color: '#6ee7b7',
@@ -86,7 +87,7 @@ export function TopBar({
                 letterSpacing: '0.02em',
               }}
             >
-              🖥 Computer Use
+              🤖 GPU Sitter
             </button>
           )}
         </div>

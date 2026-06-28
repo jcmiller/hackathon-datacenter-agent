@@ -114,9 +114,9 @@ export function ComputerUsePanel({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="cu-header">
           <div className="cu-title">
-            <span className="cu-icon">🖥</span>
-            <span>Computer Use</span>
-            <span className="cu-subtitle">Gemini 3.5 Flash · visual remediation</span>
+            <span className="cu-icon">🤖</span>
+            <span>GPU Sitter</span>
+            <span className="cu-subtitle">Gemini 3.5 Flash · ComputerUse(ENVIRONMENT_BROWSER)</span>
           </div>
           <div className="cu-controls">
             {!running && (
