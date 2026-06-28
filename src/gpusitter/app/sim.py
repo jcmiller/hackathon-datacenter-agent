@@ -183,15 +183,22 @@ def _json(obj):
 async def incidents(request: Request):
     """Stream the incident feed as SSE, real-first with explicit fixture badging.
 
-    The first frame carries the data-source provenance once; each incident frame
-    is additionally tagged ``dataSource`` so a fixture incident can never be
-    rendered as live telemetry (bead h7w, AC#1/#4).
+    Backward compatibility (bead h7w review): the provenance is emitted as a NAMED
+    SSE event (``event: provenance``), which the browser ``EventSource.onmessage``
+    handler ignores — only unnamed ``message`` frames reach it. So every default
+    frame the current React consumer sees is a real Incident (it dereferences
+    ``incident.gpu``); a non-Incident frame on the default channel would crash it.
+    Each incident is still tagged ``dataSource`` (a harmless extra field) so a
+    fixture incident can never be rendered as live telemetry. The 8co.31n React
+    rewrite consumes the provenance event via ``addEventListener('provenance')``.
     """
     feed, data_source, provenance = _incident_feed()
-    header = {"kind": "provenance", "dataSource": data_source, "provenance": provenance}
+    header = {"dataSource": data_source, "provenance": provenance}
 
     async def gen():
-        yield f"data: {_json(header)}\n\n"
+        # Named event: invisible to the default onmessage handler, so it cannot
+        # break clients that treat every onmessage frame as an Incident.
+        yield f"event: provenance\ndata: {_json(header)}\n\n"
         for inc in feed:
             if await request.is_disconnected():
                 break

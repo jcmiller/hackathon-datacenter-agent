@@ -433,16 +433,36 @@ def test_monitor_returns_scores_and_miss_grid(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _incidents_from_sse():
-    """Drain the /api/incidents SSE stream into a list of decoded JSON frames."""
+def _drain_sse():
+    """Drain /api/incidents into (default_frames, named_events).
+
+    ``default_frames`` are the unnamed ``message`` frames the browser
+    ``EventSource.onmessage`` receives — what the current React consumer treats as
+    Incidents. ``named_events`` maps ``event:`` name -> list of decoded payloads
+    (e.g. the provenance event the default handler never sees).
+    """
     sim._incidents_cache.clear()
     with client.stream("GET", "/api/incidents") as resp:
         body = "".join(resp.iter_text())
-    frames = []
-    for line in body.splitlines():
-        if line.startswith("data:"):
-            frames.append(json.loads(line[len("data:") :].strip()))
-    return frames
+    default_frames: list[dict] = []
+    named_events: dict[str, list[dict]] = {}
+    for block in body.split("\n\n"):
+        if not block.strip():
+            continue
+        event_name = None
+        data = None
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event_name = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data = json.loads(line[len("data:") :].strip())
+        if data is None:
+            continue
+        if event_name is None:
+            default_frames.append(data)
+        else:
+            named_events.setdefault(event_name, []).append(data)
+    return default_frames, named_events
 
 
 def test_dashboard_endpoints_serve_real_substrate(monkeypatch):
@@ -474,17 +494,44 @@ def test_dashboard_endpoints_serve_real_substrate(monkeypatch):
 
 
 def test_incidents_sse_real_substrate_is_badged(monkeypatch):
-    """The SSE feed leads with a provenance frame and tags every incident
-    ``dataSource`` so a fixture incident can never render as live telemetry (AC#1/#4)."""
+    """Provenance rides a NAMED 'provenance' event (invisible to the default
+    onmessage handler); every default incident frame is tagged ``dataSource`` so a
+    fixture incident can never render as live telemetry (AC#1/#4)."""
     monkeypatch.setattr(sim, "STEP_SECONDS", 0)
-    frames = _incidents_from_sse()
-    assert frames[0]["kind"] == "provenance"
-    assert frames[0]["dataSource"] == "real_substrate"
-    assert frames[0]["provenance"]["kind"] == "real"
-    incidents = frames[1:]
+    incidents, named = _drain_sse()
+    assert "provenance" in named, "provenance must be exposed on a named SSE event"
+    prov = named["provenance"][0]
+    assert prov["dataSource"] == "real_substrate"
+    assert prov["provenance"]["kind"] == "real"
     assert incidents, "real substrate yields an incident feed"
     assert all(i["dataSource"] == "real_substrate" for i in incidents)
     assert all(i["id"].startswith("INC-") for i in incidents)
+
+
+def test_incidents_sse_default_frames_are_all_incidents(tmp_path, monkeypatch):
+    """Backward-compat regression (h7w review): the current React consumer treats
+    EVERY default onmessage frame as an Incident and dereferences ``incident.gpu``.
+    So no non-Incident frame may appear on the default channel — the provenance
+    must NOT leak there. Asserted for both the real and fixture paths."""
+    monkeypatch.setattr(sim, "STEP_SECONDS", 0)
+
+    def _assert_all_incidents(default_frames):
+        assert default_frames, "the feed must still stream incidents"
+        for f in default_frames:
+            # the exact shape the React consumer dereferences without guards.
+            assert f["id"].startswith("INC-"), f
+            assert isinstance(f["gpu"], dict) and "node" in f["gpu"] and "idx" in f["gpu"], f
+            assert "kind" not in f, f"provenance frame leaked onto the default channel: {f}"
+
+    real_default, real_named = _drain_sse()
+    _assert_all_incidents(real_default)
+    assert "provenance" in real_named
+
+    # fixture path: same guarantee (force the real substrate absent).
+    monkeypatch.setattr(sim, "DASHBOARD_SUBSTRATE_DIR", str(tmp_path / "no_substrate"))
+    fx_default, fx_named = _drain_sse()
+    _assert_all_incidents(fx_default)
+    assert "provenance" in fx_named
 
 
 def test_dashboard_endpoints_fall_back_to_badged_fixture(tmp_path, monkeypatch):
@@ -510,9 +557,9 @@ def test_dashboard_endpoints_fall_back_to_badged_fixture(tmp_path, monkeypatch):
     assert tw["dataSource"] == "fixture"
     assert tw["series"]["temp"]
 
-    frames = _incidents_from_sse()
-    assert frames[0]["dataSource"] == "fixture"
-    assert all(i["dataSource"] == "fixture" for i in frames[1:])
+    incidents, named = _drain_sse()
+    assert named["provenance"][0]["dataSource"] == "fixture"
+    assert incidents and all(i["dataSource"] == "fixture" for i in incidents)
 
 
 def test_dashboard_endpoints_unavailable_when_all_absent(tmp_path, monkeypatch):
