@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """Validate the telemetry ingest against the real kalos DCGM subset.
 
-The kalos CSVs live only on the droplet (gitignored, ~1 GB each). This script
-loads a *bounded time window* across all available metrics — never the full
-frame — and prints shape stats plus a sample point lookup and snapshot, proving
-the store query surface works on real data with real GPU-id namespaces.
+The kalos CSVs are ~1 GB each and, on the cache-only droplet, the working tree
+holds only Git LFS pointers — the real frames live in the LFS object cache. This
+script resolves each metric *cache-safe* (materialized working-tree file, else the
+LFS cache object), loads a *bounded time window* across all available metrics —
+never the full frame — and prints shape stats plus a sample point lookup and
+snapshot, proving the store query surface works on real data with real GPU-id
+namespaces.
 
-Usage (on the droplet, from repo root):
+Usage (on the droplet, from repo root) — cache-safe, resolves the LFS cache::
+
+    python scripts/validate_kalos.py \
+        --repo-dir data/acme-util \
+        --start "2023-08-15 15:30:15+08:00" --end "2023-08-15 15:45:00+08:00"
+
+Or against a loose directory of already-materialized CSVs::
+
     python scripts/validate_kalos.py \
         --data-dir data/acme-util/data/utilization/kalos \
         --start "2023-08-15 15:30:15+08:00" --end "2023-08-15 15:45:00+08:00"
@@ -23,9 +33,14 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 from gpusitter.telemetry.ingest import iter_long_records  # noqa: E402
+from gpusitter.telemetry.sources import (  # noqa: E402
+    resolve_metric_csv,
+    validate_timeseries_csv,
+)
 from gpusitter.telemetry.store import TelemetryStore  # noqa: E402
 
-# The 7 metrics checked out on the droplet (others are LFS pointers / tiny stubs).
+# The canonical kalos metrics. On the droplet most are LFS pointers in the
+# working tree; the cache-safe resolver reads them from the LFS object cache.
 KALOS_METRICS = [
     "XID_ERRORS",
     "GPU_TEMP",
@@ -37,27 +52,56 @@ KALOS_METRICS = [
 ]
 
 
-def _present_sources(data_dir: str) -> dict:
-    sources = {}
+def resolve_sources(*, repo_dir: str | None = None, data_dir: str | None = None) -> dict[str, str]:
+    """Resolve readable CSV paths for the kalos metrics, cache-safe.
+
+    ``repo_dir`` (the acme-util repo root) resolves each canonical metric through
+    the Git LFS cache when the working tree holds only a pointer — the droplet
+    cache-only state. ``data_dir`` reads a loose directory of *materialized* CSVs.
+    Exactly one must be given. Metrics that are absent, not fetched on this host
+    (LFS object missing), or not a wide telemetry frame are skipped — never read
+    via a brittle byte-size heuristic.
+    """
+    if (repo_dir is None) == (data_dir is None):
+        raise ValueError("provide exactly one of repo_dir / data_dir")
+
+    sources: dict[str, str] = {}
     for metric in KALOS_METRICS:
+        if repo_dir is not None:
+            try:
+                sources[metric] = resolve_metric_csv(metric, repo_dir=repo_dir)
+            except FileNotFoundError:
+                continue  # LFS object not fetched on this host
+            except ValueError as exc:
+                print(f"skipping {metric}: {exc}", file=sys.stderr)
+            continue
         path = os.path.join(data_dir, f"{metric}.csv")
-        # Skip absent files and tiny LFS-pointer stubs (a few hundred bytes).
-        if os.path.exists(path) and os.path.getsize(path) > 1024:
-            sources[metric] = path
+        if not os.path.exists(path):
+            continue
+        try:
+            sources[metric] = validate_timeseries_csv(path)
+        except ValueError as exc:
+            print(f"skipping {metric}: {exc}", file=sys.stderr)
     return sources
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data-dir", required=True)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument(
+        "--repo-dir",
+        help="acme-util repo root; resolves metrics cache-safe via the Git LFS cache",
+    )
+    src.add_argument("--data-dir", help="directory of already-materialized kalos CSVs")
     ap.add_argument("--start", required=True, help="inclusive ISO timestamp")
     ap.add_argument("--end", required=True, help="inclusive ISO timestamp")
     ap.add_argument("--downsample", type=int, default=1)
     args = ap.parse_args()
 
-    sources = _present_sources(args.data_dir)
+    sources = resolve_sources(repo_dir=args.repo_dir, data_dir=args.data_dir)
     if not sources:
-        print(f"no usable metric CSVs under {args.data_dir}", file=sys.stderr)
+        where = args.repo_dir or args.data_dir
+        print(f"no usable metric CSVs resolved from {where}", file=sys.stderr)
         return 1
     print(f"metrics present: {sorted(sources)}")
 
