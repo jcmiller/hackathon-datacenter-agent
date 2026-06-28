@@ -230,9 +230,7 @@ class ReflectiveProposer:
     model_types: tuple[str, ...] = DEFAULT_MODEL_TYPES
     top_k: int | None = None  # cap on high-signal subset size (default: all informative)
 
-    def propose(
-        self, df: pd.DataFrame, history: list[Attempt]
-    ) -> tuple[CandidateSpec, str] | None:
+    def propose(self, df: pd.DataFrame, history: list[Attempt]) -> tuple[CandidateSpec, str] | None:
         pool = list(self.feature_pool) or feature_columns(df)
         tried = {_spec_key(a.spec.model_type, a.spec.features, pool) for a in history}
         ranking = self._merged_ranking(history)
@@ -262,9 +260,7 @@ class ReflectiveProposer:
 
     # -- the typed search space, in priority order ----------------------------
 
-    def _candidates(
-        self, pool: list[str], ranking: list[tuple[str, float]], best_model: str
-    ):
+    def _candidates(self, pool: list[str], ranking: list[tuple[str, float]], best_model: str):
         """Yield ``(CandidateSpec, hypothesis)`` in the order the agent would try them.
 
         Rounds 1..k (no ranking yet): full feature set under each model form — the

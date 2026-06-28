@@ -265,8 +265,17 @@ def test_cli_runs_the_loop_and_reports_a_learning_curve(tmp_path, capsys):
     reg_dir = str(tmp_path / "registry")
 
     rc = cli_main(
-        ["--registry", reg_dir, "--data", data, "--model-types", "logreg",
-         "--max-rounds", "4", "--json"]
+        [
+            "--registry",
+            reg_dir,
+            "--data",
+            data,
+            "--model-types",
+            "logreg",
+            "--max-rounds",
+            "4",
+            "--json",
+        ]
     )
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
