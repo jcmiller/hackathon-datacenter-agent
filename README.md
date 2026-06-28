@@ -14,9 +14,17 @@ Click any incident in the feed → Gemini 2.5 Flash triages it live with real to
 
 ## The self-improvement loop
 
+**Incident model (canonical).** An incident is an empty-aware per-GPU **Xid onset** —
+a non-fault→fault transition in `XID_ERRORS.csv` (edge-detected, not a latched code),
+delivered operationally as an **i6k miss**: a real onset the early-detection predictor
+failed to alert on within its horizon. The agent triage prompt separates **observed**
+Xid facts (a sensed onset code → threaded into `search_past_incidents` and
+`find_correlated_failures(source="xid")`) from **inferred** ones (no code → infer from
+priors + telemetry, never asserting a code). See `src/gpusitter/agent/incident.py`.
+
 ```
-incident fires
-  → agent calls get_telemetry + check_degradation_trend + find_correlated_failures
+Xid onset fires (often an i6k miss — predictor didn't catch it)
+  → agent calls get_telemetry + check_degradation_trend + find_correlated_failures(source="xid")
   → agent calls search_past_incidents (semantic similarity over all prior SOP entries)
       ↳ references similar past cases by name; notes if pattern was seen before
   → agent decides disposition + calls record_resolution with:
@@ -125,7 +133,8 @@ No big data needed locally — the app serves fixture incidents from `src/gpusit
 - ✅ `/api/model` + `/api/feedback` REST endpoints
 - ✅ **Gemini 3.5 Flash computer use** — Playwright screenshot loop + `ComputerUse(ENVIRONMENT_BROWSER)` + live action execution; streams screenshots + actions + reasoning to the UI
 - ✅ **AGENTS.md + SKILL.md** — Managed Agents persona and skill definitions for the Antigravity API
-- 🚧 Xid-event-driven real-time incident ingestion (currently replays trace CSV)
+- ✅ Xid-onset incident model — agent triages the canonical empty-aware onset / i6k-miss incident (`agent/incident.py`), separating observed Xid facts from inferred priors
+- 🚧 Xid-event-driven real-time *ingestion* into the live feed (SSE currently replays the trace CSV)
 ## Data
 
 The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs directly at query time (`data/acme-util/data/utilization/kalos/*.csv`). See **[docs/DATA.md](docs/DATA.md)** for schema details and the AcmeTrace reality check.

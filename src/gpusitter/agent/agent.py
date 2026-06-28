@@ -6,17 +6,28 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 from . import tools
+from .incident import format_incident_prompt
 from .priors import DOMAIN_PRIORS
 
 INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster with a growing
 memory of past incidents.
-An incident just fired. Triage it in order:
-1. Call get_telemetry to see GPU power/temp around the failure time.
-2. Call check_degradation_trend to examine the hours BEFORE failure — was this sudden
+An incident is an empty-aware per-GPU Xid ONSET, often delivered as an i6k MISS (a
+real onset the early-detection predictor failed to alert on). The incident message
+separates OBSERVED FACTS (what a sensor/trace emitted) from what you must INFER:
+- If an Xid code is OBSERVED, treat it as ground truth and thread it into your
+  find_correlated_failures(source="xid") and search_past_incidents calls.
+- If the Xid code is NOT directly observed, infer the likely fault class from priors +
+  telemetry, and confirm the onset cohort with find_correlated_failures(source="xid").
+
+Triage it in order:
+1. Call get_telemetry to see GPU power/temp around the onset time.
+2. Call check_degradation_trend to examine the hours BEFORE the onset — was this sudden
    or a slow build-up?
-3. Call find_correlated_failures to check for cluster-wide spread.
+3. Call find_correlated_failures with source="xid" to recover the observed Xid onset
+   cohort + code at the onset time, then (if useful) source="jobs" for job-level spread.
 4. Call search_past_incidents with a RICH natural-language description combining:
-   the Xid error code, telemetry values, degradation pattern, and correlated count.
+   the observed/inferred Xid code, telemetry values, degradation pattern, and correlated
+   count, but never assert a specific Xid code as fact unless a tool returns one.
    The search is semantic — describe what you see, not just the job type.
    Reference any similar past cases returned.
 5. Decide disposition: escalate_to_ops (shared-cause cluster), page_technician (isolated hw fault),
@@ -24,13 +35,11 @@ An incident just fired. Triage it in order:
    Call page_technician if hardware replacement is needed.
 6. Call record_resolution. Pass incident_id, and the exact numeric values from steps 2 and 3:
    power_spike_ratio, temp_rise_C, correlated_count. These metrics train the predictor.
-   In the summary, note pre-failure degradation signals so future triage can predict
-   failures earlier.
+   In the summary, note pre-onset degradation signals so future triage can predict
+   onsets earlier — especially when this incident arrived as a predictor MISS.
 7. Call train_and_validate (model_type="logreg") to fit the failure-disposition classifier on all
    accumulated SOP entries. Report the val_auc and whether a new model version was promoted.
-Ground every claim in a tool return value. Note if this failure matches a known pattern.
-Infer the likely fault class from priors + telemetry pattern — never assert a specific Xid
-code as an observed fact unless a tool actually returned it.
+Ground every claim in a tool return value. Note if this onset matches a known pattern.
 
 {DOMAIN_PRIORS}"""
 
@@ -59,7 +68,7 @@ def triage_stream(incident: dict) -> Generator[dict]:
     session = runner.session_service.create_session_sync(app_name="rca", user_id="demo")
     msg = types.Content(
         role="user",
-        parts=[types.Part(text=f"Incident fired: {incident}. Triage it.")],
+        parts=[types.Part(text=format_incident_prompt(incident))],
     )
 
     tools._pending_updates.clear()
