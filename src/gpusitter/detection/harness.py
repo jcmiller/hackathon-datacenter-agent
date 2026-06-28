@@ -192,6 +192,31 @@ def _per_horizon_table(
 
 # --- candidate evaluation (the immutable judge) ------------------------------
 
+# Row-identity columns that fingerprint a held-out set. A prediction point is
+# keyed by (gpu, t_ref, horizon); label is included so relabeling the holdout also
+# changes its identity. Columns absent from a generic dataset are simply skipped.
+_HOLDOUT_ID_COLS = ("gpu", "node", "gpu_idx", "t_ref", "horizon_s", "label")
+
+
+def holdout_identity(df: pd.DataFrame, test_mask: np.ndarray) -> str:
+    """Order-independent fingerprint of the exact held-out rows + labels.
+
+    Keep-if-better is only meaningful when the incumbent and the candidate were
+    scored on the *identical* holdout; this id is what the registry records and
+    asserts on. It hashes the *set* of test-row identity tuples, so it is invariant
+    to row order and to changes elsewhere in the dataset (e.g. the accreting
+    training history) — it changes iff the holdout rows or their labels change.
+    """
+    cols = [c for c in _HOLDOUT_ID_COLS if c in df.columns] or list(df.columns)
+    sub = df.loc[test_mask, cols]
+    keyed = sorted("|".join(str(v) for v in row) for row in sub.itertuples(index=False, name=None))
+    h = hashlib.sha256()
+    h.update(("\x1f".join(cols) + "\x1e").encode())
+    for k in keyed:
+        h.update(k.encode())
+        h.update(b"\n")
+    return h.hexdigest()
+
 
 @dataclass
 class Evaluation:
@@ -206,6 +231,12 @@ class Evaluation:
     training_window: tuple[str, str]
     n_train: int
     n_test: int
+    holdout_id: str = ""
+
+    @property
+    def leaks(self) -> bool:
+        """True iff a leakage probe tripped — such a candidate must never promote."""
+        return bool((self.metrics.get("leakage_probe") or {}).get("leaks"))
 
 
 def evaluate_candidate(
@@ -282,6 +313,7 @@ def evaluate_candidate(
         training_window=window,
         n_train=int(train_mask.sum()),
         n_test=int(test_mask.sum()),
+        holdout_id=holdout_identity(df, test_mask),
     )
 
 
@@ -341,6 +373,7 @@ class ModelCard:
     n_test: int
     dataset_path: str
     dataset_sha256: str
+    holdout_id: str = ""
     created_at: str | None = None
 
     @classmethod
@@ -454,15 +487,38 @@ class ModelRegistry:
     ) -> PromotionResult:
         """Keep-if-better: promote ``ev`` only if it beats the incumbent's primary value.
 
-        First candidate always promotes (baseline). A candidate with a lower primary
-        value than the incumbent is rejected: nothing is written, the incumbent and
-        version are unchanged. The incumbent must share the candidate's primary
-        metric, else the comparison is meaningless and we refuse it.
+        A candidate is promoted only when it clears every integrity guard:
+
+        1. **No leakage.** If a leakage probe tripped, the candidate is refused —
+           even as the baseline. A leaking model would poison the incumbent and
+           every comparison made against it thereafter.
+        2. **Same primary metric** as the incumbent.
+        3. **Same holdout.** keep-if-better is meaningful only when both models were
+           scored on the *identical* held-out set; comparing AUCs across different
+           holdouts is apples-to-oranges and could promote a worse model, so a
+           holdout-id mismatch is refused outright.
+        4. **Strictly better** primary value than the incumbent.
+
+        The first candidate is the baseline (guards 2-4 vacuous), but still subject
+        to the leakage guard. A refused candidate writes nothing: the incumbent and
+        version are unchanged.
         """
         cand = ev.primary_value
         inc = self.incumbent.primary_value if self.incumbent else None
+        inc_version = self.incumbent.version if self.incumbent else None
         if cand is None:
-            return PromotionResult(False, "candidate has no primary metric", None, inc, None)
+            return PromotionResult(False, "candidate has no primary metric", None, inc, inc_version)
+        if ev.leaks:
+            probe = ev.metrics.get("leakage_probe", {})
+            return PromotionResult(
+                False,
+                f"leakage detected — refusing promotion "
+                f"(shuffled_label_auc={probe.get('shuffled_label_auc')}, "
+                f"max_single_feature_auc={probe.get('max_single_feature_auc')})",
+                cand,
+                inc,
+                inc_version,
+            )
         if self.incumbent is not None and self.incumbent.primary_metric != ev.primary_metric:
             return PromotionResult(
                 False,
@@ -470,11 +526,20 @@ class ModelRegistry:
                 f"candidate={ev.primary_metric})",
                 cand,
                 inc,
-                self.incumbent.version,
+                inc_version,
+            )
+        if self.incumbent is not None and self.incumbent.holdout_id != ev.holdout_id:
+            return PromotionResult(
+                False,
+                f"holdout mismatch (incumbent={self.incumbent.holdout_id[:12]}, "
+                f"candidate={ev.holdout_id[:12]}) — refusing cross-holdout comparison",
+                cand,
+                inc,
+                inc_version,
             )
         if self.incumbent is not None and not (cand > inc):
             return PromotionResult(
-                False, f"{cand:.4f} <= incumbent {inc:.4f}", cand, inc, self.incumbent.version
+                False, f"{cand:.4f} <= incumbent {inc:.4f}", cand, inc, inc_version
             )
 
         version = 1 if self.incumbent is None else self.incumbent.version + 1
@@ -492,6 +557,7 @@ class ModelRegistry:
             dataset_sha256=dataset_sha256
             if dataset_sha256 is not None
             else (sha256_file(dataset_path) if os.path.exists(dataset_path) else ""),
+            holdout_id=ev.holdout_id,
             created_at=created_at,
         )
         self._persist(ev.estimator, card)

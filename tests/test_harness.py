@@ -34,11 +34,14 @@ def _signal_df(n: int = 400, *, signal: bool = True, seed: int = 0) -> pd.DataFr
     the feature is pure noise, so a model cannot beat chance — used to prove the
     metrics are real, not vacuous. Rows are spread over ascending ``t_ref`` and
     balanced across two horizons so the per-horizon table and time split are
-    exercised. Labels alternate so both classes appear in every time slice (the
-    strict split would otherwise hand back a single-class fold).
+    exercised. Labels are balanced but randomly positioned (not periodic): a
+    perfectly alternating label sequence is an artifact a shuffled-label model can
+    still exploit, inflating the no-signal baseline; real data has no such
+    periodicity. Both classes still appear in every time slice w.h.p.
     """
     rng = np.random.default_rng(seed)
     labels = np.tile([0, 1], n // 2)
+    rng.shuffle(labels)
     horizons = np.tile([60.0, 300.0], n // 2)
     if signal:
         # Moderate, overlapping separation: a real but imperfect warning signal,
@@ -139,13 +142,15 @@ def test_first_candidate_promotes_then_weaker_rejected_stronger_accepted(tmp_pat
     assert r1.promoted is True and r1.version == 1
     v1_value = reg.incumbent.primary_value
 
-    # A clearly weaker candidate must NOT be promoted; incumbent + version unchanged.
-    weak_df = _signal_df(400, signal=False)  # noise -> ~chance
-    ev2 = evaluate_candidate(weak, weak_df)
-    # ensure the weak candidate really is worse than the incumbent
-    assert ev2.primary_value < v1_value
+    # A weaker candidate on the SAME holdout (one weak feature) must NOT be
+    # promoted; incumbent + version unchanged. Same df -> same holdout_id, so this
+    # is a genuine keep-if-better rejection, not a holdout mismatch.
+    ev2 = evaluate_candidate(weak, df)
+    assert ev2.holdout_id == reg.incumbent.holdout_id  # truly the same holdout
+    assert ev2.primary_value < v1_value  # really worse than the incumbent
     r2 = reg.consider(ev2, dataset_path="synthetic.csv", dataset_sha256="x")
     assert r2.promoted is False
+    assert "<= incumbent" in r2.reason  # rejected by keep-if-better, not a guard
     assert reg.incumbent.version == 1
     assert reg.incumbent.primary_value == v1_value
     assert len(reg.history) == 1
@@ -164,6 +169,69 @@ def test_better_candidate_advances_version(tmp_path):
     r = reg.consider(strong, dataset_path="d.csv", dataset_sha256="x")
     assert r.promoted is True and reg.incumbent.version == 2
     assert [c.version for c in reg.history] == [1, 2]  # learning curve recorded
+
+
+# --- integrity guards: leakage blocks promotion; holdout identity must match --
+
+
+def _leaky_df(n: int = 400, seed: int = 0) -> pd.DataFrame:
+    """A dataset where one feature essentially *is* the label (target leakage).
+
+    ``leak_col`` = label plus tiny noise, so its univariate held-out AUC is ~1.0 and
+    the single-feature leakage probe trips. ``temp_last`` carries ordinary signal so
+    the model still trains; the point is that the candidate must be *refused*."""
+    rng = np.random.default_rng(seed)
+    labels = np.tile([0, 1], n // 2)
+    rng.shuffle(labels)
+    return pd.DataFrame(
+        {
+            "gpu": [f"node{i % 7}#0" for i in range(n)],
+            "t_ref": [(BASE + timedelta(seconds=30 * i)).isoformat() for i in range(n)],
+            "horizon_s": np.tile([60.0, 300.0], n // 2),
+            "label": labels,
+            "temp_last": np.where(labels == 1, rng.normal(75, 8, n), rng.normal(65, 8, n)),
+            "leak_col": labels + rng.normal(0, 0.01, n),
+        }
+    )
+
+
+def test_leakage_blocks_promotion_even_as_baseline(tmp_path):
+    reg = ModelRegistry(str(tmp_path))
+    ev = evaluate_candidate(CandidateSpec("logreg", ()), _leaky_df())
+    assert ev.leaks is True  # probe must have fired on the leaking feature
+
+    result = reg.consider(ev, dataset_path="leaky.csv", dataset_sha256="x")
+    assert result.promoted is False
+    assert "leakage" in result.reason.lower()
+    # Nothing persisted: no incumbent, empty history, no version files written.
+    assert reg.has_incumbent() is False and reg.incumbent is None
+    assert reg.history == []
+    assert ModelRegistry(str(tmp_path)).incumbent is None  # also nothing on disk
+
+
+def test_mismatched_holdout_is_refused_even_if_higher(tmp_path):
+    reg = ModelRegistry(str(tmp_path))
+    # Incumbent on holdout A (weak single feature -> modest AUC).
+    df_a = _signal_df(400, seed=0)
+    inc = evaluate_candidate(CandidateSpec("logreg", ("power_mean",)), df_a)
+    assert reg.consider(inc, dataset_path="a.csv", dataset_sha256="a").promoted is True
+    a_value = reg.incumbent.primary_value
+
+    # Candidate on a DIFFERENT holdout B (different rows -> different holdout_id),
+    # scoring strictly HIGHER. Without the guard its higher AUC would promote it;
+    # the guard must refuse the cross-holdout comparison and keep the incumbent.
+    df_b = _signal_df(400, seed=99).copy()
+    df_b["t_ref"] = [(BASE + timedelta(days=5, seconds=30 * i)).isoformat() for i in range(400)]
+    cand = evaluate_candidate(CandidateSpec("hgb", ()), df_b)
+    assert cand.holdout_id != reg.incumbent.holdout_id
+    assert cand.primary_value > a_value  # genuinely higher — only the guard stops it
+
+    result = reg.consider(cand, dataset_path="b.csv", dataset_sha256="b")
+    assert result.promoted is False
+    assert "holdout mismatch" in result.reason
+    assert reg.incumbent.version == 1  # unchanged
+    assert reg.incumbent.primary_value == a_value
+    assert len(reg.history) == 1
 
 
 # --- persistence / restart ---------------------------------------------------
