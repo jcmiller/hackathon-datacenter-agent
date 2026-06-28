@@ -1,4 +1,4 @@
-from backend.memory import search_incidents, append_incident
+from gpusitter.agent.memory import search_incidents, append_incident
 
 def test_search_empty_when_no_file(tmp_path):
     assert search_incidents("train", str(tmp_path/"sop.json")) == []

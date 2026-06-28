@@ -1,15 +1,17 @@
-"""Tests for backend/sim.py — run offline, no API key needed."""
-import csv, pathlib, textwrap
+"""Tests for gpusitter.app.sim — run offline, no API key needed."""
+import csv, pathlib
 import pytest
-import backend.sim as sim
+import gpusitter.app.sim as sim
+import gpusitter.detection.stream as stream
+import gpusitter.detection.classifier as clf
 from fastapi.testclient import TestClient
 
 client = TestClient(sim.app)
 
 
 def test_record_resolution_emits_pending_update(tmp_path, monkeypatch):
-    import backend.tools as tools_mod
-    import backend.memory as mem_mod
+    import gpusitter.agent.tools as tools_mod
+    import gpusitter.agent.memory as mem_mod
     sop = tmp_path / "sop.json"
     vec_path = tmp_path / "sop_vectors.json"
     monkeypatch.setattr(tools_mod, "SOP_PATH", str(sop))
@@ -69,7 +71,6 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
     csv_path = _write_sample_csv(tmp_path)
     monkeypatch.setattr(sim, "TRACE_CSV", str(csv_path))
     monkeypatch.setattr(sim, "STEP_SECONDS", 0)
-    # clear any cached incidents so the monkeypatched path is used
     sim._incidents_cache.clear()
 
     with client.stream("GET", "/api/incidents") as resp:
@@ -81,7 +82,7 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
 
     assert "data:" in body
     assert "JOB001" in body
-    assert "JOB002" not in body   # COMPLETED row must be filtered
+    assert "JOB002" not in body
 
 
 def test_triage_endpoint_wiring(monkeypatch):
@@ -98,11 +99,10 @@ def test_triage_endpoint_wiring(monkeypatch):
 
 
 def test_triage_stream_yields_events(monkeypatch):
-    import backend.agent as agent_mod
+    import gpusitter.agent.agent as agent_mod
     from google.adk.agents import Agent
     from google.adk.runners import InMemoryRunner
 
-    # Stub runner events so no real API call happens
     class FakeSession:
         id = "s1"
 
@@ -144,3 +144,14 @@ def test_triage_stream_yields_events(monkeypatch):
     assert "tool_call" in types
     assert "observation" in types
     assert "disposition" in types
+
+
+def test_model_endpoint_reflects_incumbent():
+    clf.reset()
+    clf.maybe_promote(None, "logreg", ["power_spike_ratio"], 0.87, n_samples=5)
+    r = client.get("/api/model")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model"]["version"] == 1
+    assert body["model"]["model_type"] == "logreg"
+    clf.reset()

@@ -1,5 +1,5 @@
 import pandas as pd
-from backend.dataset import build_xy, time_split
+from gpusitter.detection.dataset import build_xy, time_split
 
 def test_build_xy_shapes_and_labels():
     hist = [

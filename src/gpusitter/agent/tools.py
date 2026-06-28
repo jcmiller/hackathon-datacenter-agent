@@ -1,9 +1,13 @@
 import os
-import backend.stream as stream
-import backend.dataset as dataset
-import backend.classifier as classifier
-from backend.loader import load_incidents, telemetry_window, correlated_failures
-from backend.memory import search_incidents, append_incident
+from datetime import datetime, timedelta
+
+from ..detection import stream
+from ..detection import dataset
+from ..detection import classifier
+from ..rca.job_join import correlated_jobs, load_incidents
+from ..telemetry.timeparse import parse_time_value
+from ..telemetry.window import window_stats
+from .memory import search_incidents, append_incident
 
 TRACE_CSV        = "data/acme-util/data/job_trace/trace_kalos.csv"
 POWER_CSV        = "data/acme-util/data/utilization/kalos/POWER_USAGE.csv"
@@ -13,37 +17,47 @@ MODEL_STATE_PATH = "data/model_state.json"
 _TICKET = {"n": 0}
 _pending_updates: list[dict] = []
 
+
+def _window(fail_time, seconds):
+    """Return (start, end) bounds around fail_time using the telemetry timeparse seam."""
+    center = parse_time_value(fail_time)
+    if isinstance(center, datetime):
+        delta = timedelta(seconds=seconds)
+        return center - delta, center + delta
+    return center - seconds, center + seconds
+
+
 def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
     production fleet emits (dcgm-exporter). Values are window aggregates."""
-    import pandas as pd
-    ts = pd.to_datetime(fail_time, utc=True)
-    start = (ts - pd.Timedelta(seconds=window)).isoformat()
-    end   = (ts + pd.Timedelta(seconds=window)).isoformat()
+    lo, hi = _window(fail_time, window)
     return {
-        "DCGM_FI_DEV_POWER_USAGE": telemetry_window(POWER_CSV, start, end),
-        "DCGM_FI_DEV_GPU_TEMP":    telemetry_window(TEMP_CSV,  start, end),
+        "DCGM_FI_DEV_POWER_USAGE": window_stats(POWER_CSV, lo, hi),
+        "DCGM_FI_DEV_GPU_TEMP":    window_stats(TEMP_CSV,  lo, hi),
     }
+
 
 def find_correlated_failures(fail_time, window=120):
     """Find other node failures near this incident in time."""
-    import pandas as pd
-    ts = pd.to_datetime(fail_time, utc=True)
     inc = load_incidents(TRACE_CSV)
-    corr = correlated_failures(inc, ts, window)
+    corr = correlated_jobs(inc, fail_time, window)
     types = {c["type"] for c in corr}
     return {"count": len(corr), "jobs": [c["job_id"] for c in corr],
             "shared_type": next(iter(types)) if len(types) == 1 else None}
 
+
 def check_degradation_trend(fail_time, lookback_hours: int = 4):
     """Examine telemetry in the hours BEFORE the fault to detect gradual degradation.
     A high power_spike_ratio (>1.5) or temp_rise_C (>10) indicates pre-failure stress."""
-    import pandas as pd
-    ts = pd.to_datetime(fail_time, utc=True)
-    start = (ts - pd.Timedelta(hours=lookback_hours)).isoformat()
-    end = ts.isoformat()
-    power = telemetry_window(POWER_CSV, start, end)
-    temp  = telemetry_window(TEMP_CSV,  start, end)
+    center = parse_time_value(fail_time)
+    if isinstance(center, datetime):
+        start = center - timedelta(hours=lookback_hours)
+        end = center
+    else:
+        start = center - lookback_hours * 3600
+        end = center
+    power = window_stats(POWER_CSV, start, end)
+    temp  = window_stats(TEMP_CSV,  start, end)
     spike = round(power["max"] / power["mean"], 2) if power.get("mean", 0) > 0 else 0.0
     rise  = round(temp["max"]  - temp["min"],   1) if temp.get("samples", 0) > 0 else 0.0
     return {
@@ -55,17 +69,20 @@ def check_degradation_trend(fail_time, lookback_hours: int = 4):
         "gradual_degradation_signal": spike > 1.5 or rise > 10,
     }
 
+
 def search_past_incidents(incident_description: str):
     """Retrieve semantically similar past incidents using embedding search.
     Pass a rich description: Xid error code, telemetry pattern, correlated count, node behavior."""
     hits = search_incidents(incident_description, SOP_PATH)
     return {"count": len(hits), "matches": hits}
 
+
 def page_technician(node_info, reason):
     """Simulate paging a datacenter technician."""
     _TICKET["n"] += 1
     return {"paged": True, "ticket": f"TKT-{_TICKET['n']:04d}",
             "node": node_info, "reason": reason}
+
 
 def record_resolution(incident_type, summary, disposition, resolution,
                       incident_id: str = "",
@@ -101,14 +118,12 @@ def train_and_validate(model_type: str = "logreg"):
         return {"trained": False, "reason": "no SOP entries with metrics yet"}
     est = classifier.fit_candidate(model_type, features, X, y)
 
-    # Compute val AUC only when we have enough data for a meaningful split with both classes
     val_auc = None
     Xtr, ytr, Xval, yval = dataset.time_split_lists(X, y, val_frac=0.3)
     if len(Xval) >= 2 and len(set(ytr)) >= 2 and len(set(yval)) >= 2:
         val_auc = round(classifier.auc_from_lists(est, Xval, yval), 3)
 
     incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
-    # Promote if no incumbent yet, or new AUC beats old one (skip comparison when AUC unavailable)
     should_promote = (classifier.INCUMBENT is None or
                       (val_auc is not None and val_auc > incumbent_auc))
     promoted = False

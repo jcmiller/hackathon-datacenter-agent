@@ -10,7 +10,13 @@ Source: droplet exploration, embead bead `vf8`.
 - Metrics: `GPU_TEMP`, `GPU_UTIL`, `POWER_USAGE`, `MEMORY_TEMP`, `MEM_CLOCK`, `SM_ACTIVE`/`SM_OCCUPANCY`, `FB_USED`/`FREE`, `DRAM_ACTIVE`, `PIPE_TENSOR_ACTIVE`, `NODE_*`, `XID_ERRORS` + IPMI power.
 
 ## Patterns
-- **Aug-29 13:57–14:00 — cluster-wide correlated failure:** 882 GPUs across 141 nodes fire Xid simultaneously (~6 of 8/node), sustained minutes → the demo hero incident; validates `find_correlated_failures`.
+- **Corrected burst interpretation:** the earlier "Aug-29 13:57–14:00,
+  882-GPU cluster-wide failure" reading was a latched-gauge artifact. Those GPUs
+  had mostly faulted earlier and were still reporting held Xid codes. Count Xid
+  **rising edges/onsets**, not raw nonzero cells or window-start nonzero state.
+  The real large correlated onsets are around Aug-16/Aug-17 (roughly 100+ GPUs
+  per burst in the current characterization), while Aug-29 is mostly cumulative
+  fault state.
 - **Xid 43** (channel exception / GPU reset) dominant, then `31` (mem page fault), `94` (contained ECC), `45` (preemptive cleanup).
 - **891 / 2,344 GPUs (~38%)** hit an Xid over the window.
 - **Job states (`trace_kalos`):** COMPLETED 47,311 / **FAILED 13,836 (~22%)** / CANCELLED 1,263 / RUNNING 3.
@@ -22,4 +28,4 @@ Source: droplet exploration, embead bead `vf8`.
 - Wide format → melt to long `(t, gpu, metric, value)`.
 
 ## Open beads
-`q2o` ingest · `zxp` mining · `d8z` job↔telemetry RCA join · `p5x` precursors · `6xk` Aug-29 event · `eku` Xid characterization.
+`q2o` ingest · `zxp` mining · `d8z` job↔telemetry RCA join · `p5x` precursors · `6xk` Aug-17 06:00 correlated burst (~116 GPUs; Aug-29/882 debunked) · `eku` Xid characterization.

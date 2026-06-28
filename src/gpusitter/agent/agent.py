@@ -5,8 +5,8 @@ from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from backend.priors import DOMAIN_PRIORS
-from backend import tools
+from .priors import DOMAIN_PRIORS
+from . import tools
 
 INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster with a growing memory of past incidents.
 An incident just fired. Triage it in order:
@@ -71,7 +71,6 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
             yield {"type": "observation", "text": obs_text}
 
         if responses:
-            # Flush any file writes the tools triggered
             for upd in tools._pending_updates:
                 yield {"type": "file_update", "path": upd["path"], "entry": upd["entry"]}
             tools._pending_updates.clear()
@@ -83,7 +82,6 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
                     all_obs_text += part.text
                     yield {"type": "observation", "text": part.text}
 
-    # Extract ticket number from all observations (tool responses include page_technician output)
     for t_match in re.finditer(r"TKT-\d+", all_obs_text):
         ticket_num = t_match.group(0)
         break
@@ -101,3 +99,11 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
         "action": final_text,
         "ticket": ticket_num,
     }
+
+
+def triage(incident: dict) -> str:
+    """Synchronous wrapper returning final disposition string."""
+    for ev in triage_stream(incident):
+        if ev.get("type") == "disposition":
+            return ev["disposition"]
+    return "RESTART_AND_WATCH"

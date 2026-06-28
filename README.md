@@ -36,11 +36,11 @@ incident fires
 3. **Disposition classifier** — trains from incident 1; version increments whenever val AUC improves; AUC shown as `—` until enough varied cases accumulate for a holdout
 4. **Outcome-enriched embeddings** — auto-confirmed outcomes re-embed the SOP entry so future semantic search finds confirmed hardware faults vs false alarms
 
-## Architecture (`backend/` package)
+## Architecture (`src/gpusitter/` package)
 
-| Module | Responsibility |
+| Subpackage / module | Responsibility |
 |--------|----------------|
-| `loader.py` | AcmeTrace incidents + telemetry windows + correlation |
+| `telemetry/` + `rca/` | AcmeTrace incidents, streaming telemetry windows (no pandas), correlation |
 | `memory.py` | SOP read/write + `gemini-embedding-001` semantic search; lazy vector index in `data/sop_vectors.json`; cosine similarity with 0.4 threshold |
 | `dataset.py` | `build_xy_from_sop()` — extracts `[power_spike_ratio, temp_rise_C, correlated_count]` feature matrix from SOP entries for classifier training |
 | `classifier.py` | `fit_candidate` / `maybe_promote` / `save_state` — in-memory incumbent + persisted model card at `data/model_state.json` |
@@ -50,7 +50,6 @@ incident fires
 | `sim.py` | FastAPI: `/api/incidents` (SSE stream), `/api/triage` (streaming agent), `/api/model` (model card), `/api/feedback` (outcome recording); serves compiled React dashboard |
 
 ## API
-
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace |
@@ -70,9 +69,8 @@ After each triage the UI shows:
 ```bash
 pip install -r requirements.txt
 export GOOGLE_API_KEY=...
-uvicorn backend.sim:app --reload        # → http://localhost:8000
-pytest -q                               # offline test suite (no API key needed)
-```
+uvicorn gpusitter.app.sim:app --reload  # → http://localhost:8000  (or: PYTHONPATH=src uvicorn ...)
+pytest -q                               # offline test suite (no API key needed)```
 
 No big data needed locally — the app serves fixture incidents from `backend/dashboard/fixtures/`.
 
@@ -87,7 +85,6 @@ No big data needed locally — the app serves fixture incidents from `backend/da
 - ✅ `/api/model` + `/api/feedback` REST endpoints
 - 🚧 Xid-event-driven real-time incident ingestion (currently replays trace CSV)
 - ⏭️ Stretch: Managed-Agents actuation, MCP tool exposure, model routing by incident type
-
 ## Data
 
 The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs directly at query time (`data/acme-util/data/utilization/kalos/*.csv`). See **[docs/DATA.md](docs/DATA.md)** for schema details and the AcmeTrace reality check.
