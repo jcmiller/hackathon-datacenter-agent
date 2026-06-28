@@ -49,6 +49,7 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
     tools._pending_updates.clear()
     final_text = ""
     ticket_num = None
+    all_obs_text = ""
 
     for ev in runner.run(user_id="demo", session_id=session.id, new_message=msg):
         if ev.tool_calls:
@@ -57,7 +58,9 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
 
         if ev.tool_responses:
             for tr in ev.tool_responses:
-                yield {"type": "observation", "text": str(tr.response)}
+                obs_text = str(tr.response)
+                all_obs_text += obs_text
+                yield {"type": "observation", "text": obs_text}
 
             # Flush any file writes the tools triggered
             for upd in tools._pending_updates:
@@ -68,17 +71,18 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
             for part in ev.content.parts:
                 if getattr(part, "text", None):
                     final_text += part.text
+                    all_obs_text += part.text
                     yield {"type": "observation", "text": part.text}
 
-    # Extract ticket number from observations
-    for t_match in re.finditer(r"TKT-\d+", final_text):
+    # Extract ticket number from all observations (tool responses include page_technician output)
+    for t_match in re.finditer(r"TKT-\d+", all_obs_text):
         ticket_num = t_match.group(0)
         break
 
     disp = "RESTART_AND_WATCH"
     if "escalate" in final_text.lower():
         disp = "ESCALATE_TO_OPS"
-    elif "page" in final_text.lower() or ticket_num:
+    elif ticket_num or re.search(r'\bpage\b.*technician', final_text.lower()):
         disp = "PAGE_TECHNICIAN"
 
     yield {

@@ -81,10 +81,16 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
 
 
 def test_triage_endpoint_wiring(monkeypatch):
-    monkeypatch.setattr(sim, "triage", lambda inc: {"disposition": "restart-and-watch"})
-    r = client.post("/api/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
-    assert r.status_code == 200
-    assert r.json()["disposition"] == "restart-and-watch"
+    def fake_stream(inc):
+        yield {"type": "tool_call", "tool": "get_telemetry", "args": "{}"}
+        yield {"type": "disposition", "disposition": "RESTART_AND_WATCH",
+               "action": "ok", "ticket": None, "summary": "ok..."}
+
+    monkeypatch.setattr(sim, "triage_stream", fake_stream)
+    with client.stream("POST", "/api/triage", json={"job_id": "J1"}) as r:
+        body = "".join(r.iter_text())
+    assert "tool_call" in body
+    assert "RESTART_AND_WATCH" in body
 
 
 def test_triage_stream_yields_events(monkeypatch):

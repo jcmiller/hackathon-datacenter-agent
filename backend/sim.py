@@ -1,13 +1,15 @@
 """Sim backend: SSE incident stream + triage endpoint."""
-import asyncio, json
+import asyncio
+import json
+import threading
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from backend.loader import load_incidents
-from backend.agent import triage_stream as triage  # noqa: F401 — re-exported so tests can monkeypatch
-
 from fastapi.staticfiles import StaticFiles
 import logging
+
+from backend.loader import load_incidents
+from backend.agent import triage_stream
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -69,4 +71,24 @@ async def incidents(request: Request):
 
 @app.post("/api/triage")
 async def do_triage(incident: dict):
-    return triage(incident)
+    loop = asyncio.get_event_loop()
+    event_q: asyncio.Queue = asyncio.Queue()
+
+    def run():
+        try:
+            for ev in triage_stream(incident):
+                asyncio.run_coroutine_threadsafe(event_q.put(ev), loop).result()
+        finally:
+            asyncio.run_coroutine_threadsafe(event_q.put(None), loop).result()
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+
+    async def gen():
+        while True:
+            item = await event_q.get()
+            if item is None:
+                break
+            yield f"data: {json.dumps(item)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
