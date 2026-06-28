@@ -113,19 +113,19 @@ def test_triage_stream_yields_events(monkeypatch):
             from unittest.mock import MagicMock
             tc = MagicMock(); tc.name = "get_telemetry"; tc.args = {"fail_time": 100}
             ev1 = MagicMock()
-            ev1.tool_calls = [tc]
-            ev1.tool_responses = []
+            ev1.get_function_calls = lambda: [tc]
+            ev1.get_function_responses = lambda: []
             ev1.content = None
             tr = MagicMock(); tr.response = {"DCGM_FI_DEV_POWER_USAGE": 200}
             ev2 = MagicMock()
-            ev2.tool_calls = []
-            ev2.tool_responses = [tr]
+            ev2.get_function_calls = lambda: []
+            ev2.get_function_responses = lambda: [tr]
             ev2.content = None
             part = MagicMock(); part.text = "restart recommended"
             content = MagicMock(); content.parts = [part]
             ev3 = MagicMock()
-            ev3.tool_calls = []
-            ev3.tool_responses = []
+            ev3.get_function_calls = lambda: []
+            ev3.get_function_responses = lambda: []
             ev3.content = content
             return [ev1, ev2, ev3]
 

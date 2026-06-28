@@ -52,16 +52,16 @@ def triage_stream(incident: dict) -> Generator[dict, None, None]:
     all_obs_text = ""
 
     for ev in runner.run(user_id="demo", session_id=session.id, new_message=msg):
-        if ev.tool_calls:
-            for tc in ev.tool_calls:
-                yield {"type": "tool_call", "tool": tc.name, "args": str(tc.args)}
+        for tc in ev.get_function_calls():
+            yield {"type": "tool_call", "tool": tc.name, "args": str(tc.args)}
 
-        if ev.tool_responses:
-            for tr in ev.tool_responses:
-                obs_text = str(tr.response)
-                all_obs_text += obs_text
-                yield {"type": "observation", "text": obs_text}
+        responses = ev.get_function_responses()
+        for tr in responses:
+            obs_text = str(tr.response)
+            all_obs_text += obs_text
+            yield {"type": "observation", "text": obs_text}
 
+        if responses:
             # Flush any file writes the tools triggered
             for upd in tools._pending_updates:
                 yield {"type": "file_update", "path": upd["path"], "entry": upd["entry"]}
