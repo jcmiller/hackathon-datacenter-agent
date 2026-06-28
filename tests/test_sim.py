@@ -54,7 +54,7 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
     # clear any cached incidents so the monkeypatched path is used
     sim._incidents_cache.clear()
 
-    with client.stream("GET", "/incidents") as resp:
+    with client.stream("GET", "/api/incidents") as resp:
         body = ""
         for chunk in resp.iter_text():
             body += chunk
@@ -68,6 +68,6 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
 
 def test_triage_endpoint_wiring(monkeypatch):
     monkeypatch.setattr(sim, "triage", lambda inc: "restart-and-watch")
-    r = client.post("/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
+    r = client.post("/api/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
     assert r.status_code == 200
     assert r.json()["disposition"] == "restart-and-watch"

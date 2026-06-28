@@ -7,6 +7,9 @@ from backend.loader import load_incidents
 from backend.agent import triage  # noqa: F401 — re-exported so tests can monkeypatch
 
 from fastapi.staticfiles import StaticFiles
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
 
@@ -30,6 +33,15 @@ _incidents_cache: dict[str, list] = {}
 
 
 def _get_incidents() -> list[dict]:
+    # Try loading the high-fidelity dashboard incidents fixture first
+    fixtures_path = _DASHBOARD.parent / "fixtures" / "incidents.json"
+    if fixtures_path.exists():
+        try:
+            with open(fixtures_path, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load incidents.json fixture: {e}")
+            
     path = TRACE_CSV
     if path not in _incidents_cache:
         _incidents_cache[path] = load_incidents(path)
@@ -41,7 +53,7 @@ def index():
     return FileResponse(str(_DASHBOARD))
 
 
-@app.get("/incidents")
+@app.get("/api/incidents")
 async def incidents(request: Request):
     async def gen():
         for inc in _get_incidents():
@@ -53,6 +65,6 @@ async def incidents(request: Request):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-@app.post("/triage")
+@app.post("/api/triage")
 async def do_triage(incident: dict):
     return {"disposition": triage(incident)}

@@ -9,7 +9,6 @@ import type {
 import {
   loadAgentRuns,
   loadFleet,
-  loadIncidents,
   loadMeta,
   loadTelemetry,
 } from "./data";
@@ -31,18 +30,66 @@ export function App() {
   const [feedCollapsed, setFeedCollapsed] = useState(false);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
 
-  // initial load — default-select the hero (cascade) incident
+  // initial load — load initial topology and agent run definitions
   useEffect(() => {
-    Promise.all([loadIncidents(), loadFleet(), loadMeta(), loadAgentRuns()])
-      .then(([inc, fl, mt, rn]) => {
-        setIncidents(inc);
-        setFleet(fl);
+    Promise.all([loadFleet(), loadMeta(), loadAgentRuns()])
+      .then(([fl, mt, rn]) => {
+        // Start with a clean healthy cluster where all cells are initialized as active/idle
+        // to clearly demonstrate the live incoming incident stream turning cells red!
+        const healthyCells = fl.cells.map(c => ({
+          ...c,
+          status: (c.status === "fault" ? "active" : c.status) as "fault" | "active" | "idle"
+        }));
+        
+        setFleet({
+          ...fl,
+          cells: healthyCells,
+          faulted: 0
+        });
         setMeta(mt);
         setRuns(rn);
-        const hero = inc.find((i) => i.hero) ?? inc[0];
-        if (hero) setSelectedId(hero.id);
       })
       .catch((e) => console.error("fixture load failed", e));
+
+    // Connect to live SSE stream for real-time incidents!
+    const source = new EventSource('/api/incidents');
+    source.onmessage = (event) => {
+      const incident = JSON.parse(event.data) as Incident;
+      
+      setIncidents((prev) => {
+        if (prev.some((i) => i.id === incident.id)) return prev;
+        const next = [incident, ...prev];
+        // Auto-select the first incident that arrives so the agent thinking animation triggers
+        if (prev.length === 0) {
+          setSelectedId(incident.id);
+        }
+        return next;
+      });
+
+      // Turn the matching GPU cell Red in real-time!
+      setFleet((prevFleet) => {
+        if (!prevFleet) return null;
+        const cells = prevFleet.cells.map((cell) => {
+          if (cell.node === incident.gpu.node && cell.idx === incident.gpu.idx) {
+            return {
+              ...cell,
+              status: "fault" as const,
+              xid: incident.xid,
+            };
+          }
+          return cell;
+        });
+        return {
+          ...prevFleet,
+          cells,
+          faulted: cells.filter(c => c.status === 'fault').length,
+        };
+      });
+    };
+
+    return () => {
+      source.close();
+    };
   }, []);
 
   // load telemetry for the selected incident
