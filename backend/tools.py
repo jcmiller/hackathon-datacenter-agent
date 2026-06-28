@@ -34,9 +34,30 @@ def find_correlated_failures(fail_time, window=120):
     return {"count": len(corr), "jobs": [c["job_id"] for c in corr],
             "shared_type": next(iter(types)) if len(types) == 1 else None}
 
-def search_past_incidents(incident_type):
-    """Retrieve resolved past incidents of the same type."""
-    hits = search_incidents(incident_type, SOP_PATH)
+def check_degradation_trend(fail_time, lookback_hours: int = 4):
+    """Examine telemetry in the hours BEFORE the fault to detect gradual degradation.
+    A high power_spike_ratio (>1.5) or temp_rise_C (>10) indicates pre-failure stress."""
+    import pandas as pd
+    ts = pd.to_datetime(fail_time, utc=True)
+    start = (ts - pd.Timedelta(hours=lookback_hours)).isoformat()
+    end = ts.isoformat()
+    power = telemetry_window(POWER_CSV, start, end)
+    temp  = telemetry_window(TEMP_CSV,  start, end)
+    spike = round(power["max"] / power["mean"], 2) if power.get("mean", 0) > 0 else 0.0
+    rise  = round(temp["max"]  - temp["min"],   1) if temp.get("samples", 0) > 0 else 0.0
+    return {
+        "lookback_hours": lookback_hours,
+        "power": power,
+        "power_spike_ratio": spike,
+        "temp": temp,
+        "temp_rise_C": rise,
+        "gradual_degradation_signal": spike > 1.5 or rise > 10,
+    }
+
+def search_past_incidents(incident_description: str):
+    """Retrieve semantically similar past incidents using embedding search.
+    Pass a rich description: Xid error code, telemetry pattern, correlated count, node behavior."""
+    hits = search_incidents(incident_description, SOP_PATH)
     return {"count": len(hits), "matches": hits}
 
 def page_technician(node_info, reason):

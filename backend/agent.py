@@ -8,16 +8,20 @@ from google.genai import types
 from backend.priors import DOMAIN_PRIORS
 from backend import tools
 
-INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster.
-An incident just fired. Do the triage a human on-call would do:
-1. Call get_telemetry to see GPU power/temp (DCGM fields) around the failure time.
-2. Call find_correlated_failures to see if other nodes failed in the same window.
-3. Call search_past_incidents to reuse a known resolution for this incident type.
-4. Decide a disposition: escalate to datacenter ops (shared-cause cluster),
-   page_technician (isolated hardware fault), or restart-and-watch (healthy telemetry).
-   Page the technician via the tool if hardware replacement is needed.
-5. Call record_resolution to log what you found and decided.
-Ground every statement in a number a tool returned. Be concise.
+INSTRUCTION = f"""You are the on-call engineer for a GPU training cluster with a growing memory of past incidents.
+An incident just fired. Triage it in order:
+1. Call get_telemetry to see GPU power/temp around the failure time.
+2. Call check_degradation_trend to examine the hours BEFORE failure — was this sudden or a slow build-up?
+3. Call find_correlated_failures to check for cluster-wide spread.
+4. Call search_past_incidents with a RICH natural-language description combining: the Xid error code,
+   telemetry values, degradation pattern, and correlated count. The search is semantic — describe
+   what you see, not just the job type. Reference any similar past cases returned.
+5. Decide disposition: escalate_to_ops (shared-cause cluster), page_technician (isolated hw fault),
+   or restart_and_watch (healthy telemetry + no history of recurrence).
+   Call page_technician if hardware replacement is needed.
+6. Call record_resolution. In the summary, explicitly note any pre-failure degradation signals
+   (spike ratio, temp rise) so future triage can predict similar failures earlier.
+Ground every claim in a tool return value. Note if this failure matches a known pattern.
 
 {DOMAIN_PRIORS}"""
 
@@ -29,6 +33,7 @@ def _build_agent():
         instruction=INSTRUCTION,
         tools=[
             tools.get_telemetry,
+            tools.check_degradation_trend,
             tools.find_correlated_failures,
             tools.search_past_incidents,
             tools.page_technician,

@@ -9,8 +9,12 @@ client = TestClient(sim.app)
 
 def test_record_resolution_emits_pending_update(tmp_path, monkeypatch):
     import backend.tools as tools_mod
+    import backend.memory as mem_mod
     sop = tmp_path / "sop.json"
+    vec_path = tmp_path / "sop_vectors.json"
     monkeypatch.setattr(tools_mod, "SOP_PATH", str(sop))
+    monkeypatch.setattr(mem_mod, "_SOP_VECTORS", str(vec_path))
+    monkeypatch.setattr(mem_mod, "_embed", lambda text: [0.1, 0.2, 0.3])
     tools_mod._pending_updates.clear()
 
     tools_mod.record_resolution("GPU_HW_FAULT", "test summary", "PAGE_TECHNICIAN", "replaced card")
@@ -116,6 +120,11 @@ def test_triage_stream_yields_events(monkeypatch):
             ev1.get_function_calls = lambda: [tc]
             ev1.get_function_responses = lambda: []
             ev1.content = None
+            tc2 = MagicMock(); tc2.name = "check_degradation_trend"; tc2.args = {"fail_time": "2023-05-17T11:17:30+00:00"}
+            ev1b = MagicMock()
+            ev1b.get_function_calls = lambda: [tc2]
+            ev1b.get_function_responses = lambda: []
+            ev1b.content = None
             tr = MagicMock(); tr.response = {"DCGM_FI_DEV_POWER_USAGE": 200}
             ev2 = MagicMock()
             ev2.get_function_calls = lambda: []
@@ -127,7 +136,7 @@ def test_triage_stream_yields_events(monkeypatch):
             ev3.get_function_calls = lambda: []
             ev3.get_function_responses = lambda: []
             ev3.content = content
-            return [ev1, ev2, ev3]
+            return [ev1, ev1b, ev2, ev3]
 
     monkeypatch.setattr(agent_mod, "InMemoryRunner", lambda **kw: FakeRunner())
     events = list(agent_mod.triage_stream({"job_id": "J1", "fail_time": 100}))
