@@ -4,25 +4,31 @@ import backend.classifier as classifier
 from backend.loader import load_incidents, telemetry_window, correlated_failures
 from backend.memory import search_incidents, append_incident
 
-TRACE_CSV = "data/trace_kalos.csv"
+TRACE_CSV = "data/acme-util/data/job_trace/trace_kalos.csv"
 # Telemetry files mapped to the real DCGM field they represent.
-POWER_CSV = "data/util/GPU_AB_Power.csv"   # DCGM_FI_DEV_POWER_USAGE (W)
-TEMP_CSV = "data/util/gpu_temp_kalos.pkl"  # DCGM_FI_DEV_GPU_TEMP (C)
-SOP_PATH = "data/sop.json"
+POWER_CSV = "data/acme-util/data/utilization/kalos/POWER_USAGE.csv"  # DCGM_FI_DEV_POWER_USAGE (W)
+TEMP_CSV  = "data/acme-util/data/utilization/kalos/GPU_TEMP.csv"     # DCGM_FI_DEV_GPU_TEMP (C)
+SOP_PATH  = "data/sop.json"
 _TICKET = {"n": 0}
 
 def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
     production fleet emits (dcgm-exporter). Values are window aggregates."""
+    import pandas as pd
+    ts = pd.to_datetime(fail_time, utc=True)
+    start = (ts - pd.Timedelta(seconds=window)).isoformat()
+    end   = (ts + pd.Timedelta(seconds=window)).isoformat()
     return {
-        "DCGM_FI_DEV_POWER_USAGE": telemetry_window(POWER_CSV, fail_time - window, fail_time + window),
-        "DCGM_FI_DEV_GPU_TEMP": telemetry_window(TEMP_CSV, fail_time - window, fail_time + window),
+        "DCGM_FI_DEV_POWER_USAGE": telemetry_window(POWER_CSV, start, end),
+        "DCGM_FI_DEV_GPU_TEMP":    telemetry_window(TEMP_CSV,  start, end),
     }
 
 def find_correlated_failures(fail_time, window=120):
     """Find other node failures near this incident in time."""
+    import pandas as pd
+    ts = pd.to_datetime(fail_time, utc=True)
     inc = load_incidents(TRACE_CSV)
-    corr = correlated_failures(inc, fail_time, window)
+    corr = correlated_failures(inc, ts, window)
     types = {c["type"] for c in corr}
     return {"count": len(corr), "jobs": [c["job_id"] for c in corr],
             "shared_type": next(iter(types)) if len(types) == 1 else None}

@@ -13,7 +13,7 @@ logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
 
-TRACE_CSV = "data/trace_kalos.csv"
+TRACE_CSV = "data/acme-util/data/job_trace/trace_kalos.csv"
 STEP_SECONDS = 3
 
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
@@ -33,18 +33,20 @@ _incidents_cache: dict[str, list] = {}
 
 
 def _get_incidents() -> list[dict]:
-    # Try loading the high-fidelity dashboard incidents fixture first
-    fixtures_path = _DASHBOARD.parent / "fixtures" / "incidents.json"
-    if fixtures_path.exists():
-        try:
-            with open(fixtures_path, "r") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Failed to load incidents.json fixture: {e}")
-            
     path = TRACE_CSV
     if path not in _incidents_cache:
-        _incidents_cache[path] = load_incidents(path)
+        # Use high-fidelity fixtures for the default relative path;
+        # skip for absolute paths (e.g. test-injected tmp files).
+        fixtures_path = _DASHBOARD.parent / "fixtures" / "incidents.json"
+        if not Path(path).is_absolute() and fixtures_path.exists():
+            try:
+                with open(fixtures_path, "r") as f:
+                    _incidents_cache[path] = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load incidents.json fixture: {e}")
+                _incidents_cache[path] = load_incidents(path)
+        else:
+            _incidents_cache[path] = load_incidents(path)
     return _incidents_cache[path]
 
 
@@ -67,4 +69,4 @@ async def incidents(request: Request):
 
 @app.post("/api/triage")
 async def do_triage(incident: dict):
-    return {"disposition": triage(incident)}
+    return triage(incident)

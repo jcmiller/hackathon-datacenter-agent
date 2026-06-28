@@ -23,7 +23,7 @@ def _write_sample_csv(tmp_path: pathlib.Path) -> pathlib.Path:
         dict(job_id="JOB001", user="alice", node_num=4, gpu_num=8, cpu_num=32,
              type="GPU_TRAIN", state="NODE_FAIL", submit_time=1000, start_time=1010,
              end_time=1100, duration=90, queue="gpu", gpu_time=720,
-             fail_time=1050.0, stop_time=1100),
+             fail_time="2023-05-17 11:17:30+00:00", stop_time=1100),
         # COMPLETED row — filtered out by load_incidents
         dict(job_id="JOB002", user="bob", node_num=2, gpu_num=4, cpu_num=16,
              type="GPU_TRAIN", state="COMPLETED", submit_time=2000, start_time=2010,
@@ -67,7 +67,7 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
 
 
 def test_triage_endpoint_wiring(monkeypatch):
-    monkeypatch.setattr(sim, "triage", lambda inc: "restart-and-watch")
+    monkeypatch.setattr(sim, "triage", lambda inc: {"disposition": "restart-and-watch"})
     r = client.post("/api/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
     assert r.status_code == 200
     assert r.json()["disposition"] == "restart-and-watch"
