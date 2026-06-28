@@ -10,36 +10,48 @@ from lfs_helper import get_lfs_cache_path
 
 def run_analysis():
     repo_dir = "/root/hackathon-datacenter-agent/data/acme-util"
-    
-    # We are analyzing GPU '172.31.5.233-2' which we found has a transition to Xid 31
     target_gpu = '172.31.5.233-2'
     
     print(f"Resolving LFS cache paths for GPU {target_gpu}...")
     try:
         files = {
-            'temp': 'data/utilization/kalos/GPU_TEMP.csv',
-            'power': 'data/utilization/kalos/POWER_USAGE.csv',
-            'util': 'data/utilization/kalos/GPU_UTIL.csv',
-            'xid': 'data/utilization/kalos/XID_ERRORS.csv'
+            'Temp': 'data/utilization/kalos/GPU_TEMP.csv',
+            'Mem_Temp': 'data/utilization/kalos/MEMORY_TEMP.csv',
+            'Util': 'data/utilization/kalos/GPU_UTIL.csv',
+            'Mem_Copy': 'data/utilization/kalos/MEM_COPY_UTIL.csv',
+            'FB_Used': 'data/utilization/kalos/FB_USED.csv',
+            'FB_Free': 'data/utilization/kalos/FB_FREE.csv',
+            'Power': 'data/utilization/kalos/POWER_USAGE.csv',
+            'SM_Act': 'data/utilization/kalos/SM_ACTIVE.csv',
+            'SM_Occ': 'data/utilization/kalos/SM_OCCUPANCY.csv',
+            'Tensor': 'data/utilization/kalos/PIPE_TENSOR_ACTIVE.csv',
+            'Clock': 'data/utilization/kalos/MEM_CLOCK.csv',
+            'Xid': 'data/utilization/kalos/XID_ERRORS.csv'
         }
         
-        data = {}
+        merged = None
         for name, rel_path in files.items():
             path = get_lfs_cache_path(repo_dir, rel_path)
-            # Only read Time and the specific target GPU column to save memory
-            df = pd.read_csv(path, usecols=['Time', target_gpu])
+            # Read only the header first to see if target_gpu exists
+            header = pd.read_csv(path, nrows=0)
+            if target_gpu in header.columns:
+                df = pd.read_csv(path, usecols=['Time', target_gpu]).rename(columns={target_gpu: name})
+            else:
+                print(f"Warning: {name} ({rel_path}) does not contain columns for {target_gpu}. Creating empty column.")
+                df = pd.read_csv(path, usecols=['Time'])
+                df[name] = None
             df['Time'] = pd.to_datetime(df['Time'])
-            data[name] = df
-            
-        print("Merging telemetry data on Time...")
-        merged = data['temp'].rename(columns={target_gpu: 'Temp'})
-        merged = merged.merge(data['power'].rename(columns={target_gpu: 'Power'}), on='Time')
-        merged = merged.merge(data['util'].rename(columns={target_gpu: 'Util'}), on='Time')
-        merged = merged.merge(data['xid'].rename(columns={target_gpu: 'Xid'}), on='Time')
+            if merged is None:
+                merged = df
+            else:
+                merged = merged.merge(df, on='Time', how='outer')
+                
+        print("Sorting and filtering telemetry data around incident window...")
+        merged = merged.sort_values('Time')
         
         # Filter around the incident day/time range
         target_time = pd.to_datetime('2023-08-29 13:57:30+08:00')
-        start_time = target_time - pd.Timedelta(minutes=20)
+        start_time = target_time - pd.Timedelta(minutes=15)
         end_time = target_time + pd.Timedelta(minutes=5)
         
         subset = merged[(merged['Time'] >= start_time) & (merged['Time'] <= end_time)].copy()
@@ -94,10 +106,10 @@ It demonstrates how real-world data can be used to shift from **reactive failure
 
 ## 1. Incident Timeline
 
-Below is the telemetry subset leading up to and immediately following the failure:
+Below is the aligned multi-field telemetry subset (combining 9 active fields) leading up to and immediately following the failure:
 
-| Time | Temperature (°C) | Power Usage (W) | GPU Utilization (%) | Xid Error | Status / Event |
-| :--- | :---: | :---: | :---: | :---: | :--- |
+| Time | Temp (°C) | Mem Temp (°C) | Util (%) | FB Used (MB) | FB Free (MB) | Power (W) | Clock (MHz) | Xid | Status / Event |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 """)
             for _, row in subset.iterrows():
                 event_str = "Idle/Normal"
@@ -108,16 +120,25 @@ Below is the telemetry subset leading up to and immediately following the failur
                 elif row['Util'] == 100:
                     event_str = "⚠️ **100% UTILIZATION SPIKE**"
                 
-                f.write(f"| {row['Time'].strftime('%Y-%m-%d %H:%M:%S %z')} | {row['Temp']} | {row['Power']} | {row['Util']} | {row['Xid'] if pd.notna(row['Xid']) and row['Xid'] != 0 else '-'} | {event_str} |\n")
+                xid_val = int(row['Xid']) if pd.notna(row['Xid']) and row['Xid'] != 0 else '-'
+                temp_val = row['Temp'] if pd.notna(row['Temp']) else '-'
+                mem_temp_val = row['Mem_Temp'] if pd.notna(row['Mem_Temp']) else '-'
+                util_val = row['Util'] if pd.notna(row['Util']) else '-'
+                fb_used_val = row['FB_Used'] if pd.notna(row['FB_Used']) else '-'
+                fb_free_val = row['FB_Free'] if pd.notna(row['FB_Free']) else '-'
+                power_val = row['Power'] if pd.notna(row['Power']) else '-'
+                clock_val = row['Clock'] if pd.notna(row['Clock']) else '-'
+                
+                f.write(f"| {row['Time'].strftime('%Y-%m-%d %H:%M:%S %z')} | {temp_val} | {mem_temp_val} | {util_val} | {fb_used_val} | {fb_free_val} | {power_val} | {clock_val} | {xid_val} | {event_str} |\n")
                 
             f.write(f"""
 ---
 
 ## 2. Key Findings
 
-1. **Official Failure Registration**: The NVIDIA driver logged **Xid 31** (Memory page retirement / ECC error) at **{xid_time.strftime('%H:%M:%S')}**. At this point, the GPU was halted and unusable.
-2. **Early Workload Spike**: A massive workload (Power: **{alert_power}W**, Utilization: **{alert_util}%**) started running at **{alert_time.strftime('%H:%M:%S')}**, which triggered memory stress.
-3. **Detection Potential**: By implementing basic anomaly detection rules on telemetry (e.g. detecting sudden max utilization or sustained high power draw on a node), we can trigger an early-warning warning state at **{alert_time.strftime('%H:%M:%S')}**.
+1. **VRAM Allocation Beat**: At **13:51:30**, we see memory allocation (`FB_Used`) jump to **5,072 MB**, indicating context initialization. By **13:52:00**, it allocates the full **81,248 MB** (representing 100% of an A100 80GB GPU's memory limit), leaving only 79 MB free.
+2. **Compute & Power Spike**: Telemetry captures a massive workload running at **13:52:00** where utilization spikes to **100%**, core temperature rises by 5°C, memory temperature rises to **56.0°C**, and power usage reaches **388W** (near the maximum limits of an SXM A100 GPU).
+3. **Failure Propagation**: The GPU successfully finishes the first workload segment and returns to idle, then spikes briefly again at **13:56:30**. Exactly 60 seconds later, at **13:57:30**, the NVIDIA driver logs **Xid 31** (Memory page retirement / ECC error), locking the GPU permanently.
 
 ### Alerting Advantage:
 * **Time Savings**: **{int(seconds_saved)} seconds ({seconds_saved / 60:.1f} minutes)** of early warning.
