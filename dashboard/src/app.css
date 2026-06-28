@@ -1,12 +1,13 @@
 /* Mission-control layout: top KPI bar + 3 columns (feed | center | triage). */
 
 .app {
-  height: 100vh;
   display: grid;
-  /* top bar · 3-column grid (fills) · optional learning-curve band.
-     The third (auto) row keeps the curve in normal flow so it never
-     overlaps the columns; when hidden it collapses to zero height. */
-  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr;
+  /* Stack top bar · dashboard columns · optional learning-curve band.
+     The page is NOT pinned to one screen: the columns fill the first
+     viewport, and the curve is appended BELOW so the page grows taller
+     and scrolls — it never overlaps the dashboard. */
+  min-height: 100vh;
   gap: 10px;
   padding: 10px;
 }
@@ -52,6 +53,9 @@
   display: grid;
   grid-template-columns: 300px 1fr 420px;
   gap: 10px;
+  /* Pin the dashboard to one full screen so it always shows at its proper
+     size; the learning-curve band lives below the fold. */
+  height: calc(100vh - 92px);
   min-height: 0;
 }
 .col {
