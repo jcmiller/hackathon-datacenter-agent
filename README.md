@@ -41,7 +41,7 @@ Two things make this more than "an LLM on a dashboard":
 pip install -r requirements.txt
 python scripts/make_mock_jobs.py        # writes a small data/jobs.csv (synthetic, schema-correct)
 export GOOGLE_API_KEY=...               # needed only for the live agent /triage
-uvicorn backend.sim:app --reload        # → http://localhost:8000
+PYTHONPATH=src uvicorn gpusitter.app.sim:app --reload        # → http://localhost:8000
 pytest -q                               # offline test suite
 ```
 
