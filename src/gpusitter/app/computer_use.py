@@ -136,21 +136,22 @@ async def run_session(
     if task is None:
         task = DEFAULT_TASK
 
-    client = Client()
+    client = Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
     try:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
             page = await browser.new_page(viewport=VIEWPORT)
 
-            # Load the dashboard and wait for incidents to stream in
-            await page.goto(DASHBOARD_URL, wait_until="networkidle", timeout=20_000)
-            # Wait for incident rows to appear
+            # Load the dashboard — use domcontentloaded; SSE keeps connection open so
+            # networkidle never fires.
+            await page.goto(DASHBOARD_URL, wait_until="domcontentloaded", timeout=20_000)
+            # Wait for incident rows to stream in
             try:
-                await page.wait_for_selector(".inc", timeout=12_000)
+                await page.wait_for_selector(".inc", timeout=20_000)
                 await asyncio.sleep(2)  # let a few more incidents arrive
             except Exception:
-                await asyncio.sleep(3)
+                await asyncio.sleep(5)
 
             raw, b64 = await _screenshot(page)
             yield {"type": "screenshot", "data": b64, "turn": 0}
