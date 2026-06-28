@@ -20,20 +20,28 @@ Two things make this more than "an LLM on a dashboard":
 - **The agent's investigation drives real ML** — model selection + feature engineering gated by held-out ROC-AUC, not vibes.
 - **Every claim is grounded** in a number a tool returned. The agent never asserts a fault cause it can't read (real Xid codes when available; inference from priors otherwise).
 
+## Live demo
+
+**http://134.199.208.214:8000** — publicly accessible, running on DigitalOcean (SFO3).
+
+Click any incident in the feed → the agent triages it live with real Gemini tool calls streaming
+in real time. Each run writes a new entry to the SOP; subsequent similar incidents surface past
+cases with semantic similarity scores.
+
 ## Architecture (`backend/` package)
 
 | Module | Responsibility |
 |--------|----------------|
 | `loader.py` | AcmeTrace incidents + telemetry windows + correlation |
-| `stream.py` | replay `jobs.csv` over time, warm-start, accrete `HISTORY` |
-| `dataset.py` | history → feature matrix + labels + time-ordered split |
-| `classifier.py` | fit candidate, score ROC-AUC, hold + promote the live model |
-| `tools.py` | agent tools: `get_sensory`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution`, `train_and_validate` |
-| `priors.py` | GPU-failure domain priors injected into the agent |
-| `agent.py` | Google ADK + Gemini agent: investigate → improve model → dispose |
-| `sim.py` | FastAPI: SSE incident stream, `/triage`, `/model`; serves the dashboard |
+| `memory.py` | SOP read/write + `gemini-embedding-001` semantic search (cosine similarity over `data/sop_vectors.json`) |
+| `tools.py` | `get_telemetry`, `check_degradation_trend`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution` |
+| `priors.py` | GPU-failure domain priors injected into the agent system prompt |
+| `agent.py` | Google ADK + Gemini 2.5 Flash: 6-step ReAct triage loop, yields SSE events |
+| `sim.py` | FastAPI: SSE incident stream (`/api/incidents`), streaming triage (`/api/triage`), serves compiled React dashboard |
 
-**Harness:** Google ADK + Gemini 2.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox; that's a stretch for autonomous actuation).
+**Recursive self-improvement:** each `record_resolution` call embeds the new SOP entry with `gemini-embedding-001`; `search_past_incidents` does cosine similarity over all prior entries so the agent recognizes failure patterns it has seen before and notes pre-failure degradation signals for earlier prediction next time.
+
+**Harness:** Google ADK + Gemini 2.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox).
 
 ## Quick start (local, no big data needed)
 
@@ -74,8 +82,11 @@ scripts/download_datasets.sh --list # show targets
 
 ## Status
 
-- ✅ Reactive RCA agent (loader, memory, priors, tools, ADK agent, SSE sim + dashboard) — built, tested.
-- 🚧 Self-improving predictor loop (`dataset`, `classifier`, `stream`, `train_and_validate`, `/model`) — in progress.
-- ⏭️ Stretch: Xid-event-driven incidents, Managed-Agents actuation spin-off, MCP tool exposure, real frontend.
+- ✅ Reactive RCA agent — real Gemini tool calls, live SSE streaming, animated dashboard
+- ✅ Semantic memory — `gemini-embedding-001` embeddings, cosine similarity, lazy vector index
+- ✅ Pre-failure degradation detection — power spike ratio + temp rise over 4-hour lookback
+- ✅ Self-improving SOP — every resolution embeds and becomes searchable for future incidents
+- 🚧 ML predictor loop (`dataset`, `classifier`, `train_and_validate`) — in progress
+- ⏭️ Stretch: Xid-event-driven incidents, Managed-Agents actuation, MCP tool exposure
 
 `scraps/` holds the earlier iteration. `docs/superpowers/` (local only) holds the design spec + implementation plan.
