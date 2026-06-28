@@ -211,3 +211,99 @@ def test_model_endpoint_reflects_incumbent():
     assert body["model"]["version"] == 1
     assert body["model"]["model_type"] == "logreg"
     clf.reset()
+
+
+# ---------------------------------------------------------------------------
+# /api/monitor — operational reactive trigger (bead i6k)
+# ---------------------------------------------------------------------------
+
+
+def _monitor_feature_df():
+    """Small labeled feature table (lys/r7j substrate) with a learnable temp signal."""
+    from datetime import datetime, timedelta, timezone
+
+    import numpy as np
+    import pandas as pd
+
+    rng = np.random.default_rng(0)
+    rows = []
+    t0 = datetime(2023, 8, 15, tzinfo=timezone(timedelta(hours=8)))
+    for i in range(40):
+        onset = t0 + timedelta(hours=i)
+        rows.append(
+            {
+                "gpu": f"g{i}#0",
+                "t_ref": (onset - timedelta(seconds=300)).isoformat(),
+                "horizon_s": 300.0,
+                "label": 1,
+                "temp_last": float(rng.normal(78, 7)),
+            }
+        )
+        for k in range(6):
+            t = t0 + timedelta(hours=i, seconds=int(rng.integers(-2000, 2000)))
+            rows.append(
+                {
+                    "gpu": f"decoy{k}#0",
+                    "t_ref": t.isoformat(),
+                    "horizon_s": 300.0,
+                    "label": 0,
+                    "temp_last": float(rng.normal(63, 7)),
+                }
+            )
+    return pd.DataFrame(rows).sort_values("t_ref").reset_index(drop=True)
+
+
+def test_monitor_unavailable_without_incumbent(tmp_path, monkeypatch):
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(tmp_path / "empty_reg"))
+    r = client.get("/api/monitor")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["available"] is False
+    assert "incumbent" in body["reason"]
+
+
+def test_monitor_unavailable_without_dataset(tmp_path, monkeypatch):
+    # A registry WITH an incumbent but a missing feature table -> honest unavailable.
+    from gpusitter.detection.harness import CandidateSpec, ModelRegistry, run_round
+
+    df = _monitor_feature_df()
+    data = tmp_path / "train.csv"
+    df.to_csv(data, index=False)
+    reg_dir = tmp_path / "reg"
+    reg = ModelRegistry(str(reg_dir))
+    run_round(CandidateSpec("logreg", ("temp_last",)), df, reg, dataset_path=str(data))
+
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(reg_dir))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(tmp_path / "missing.csv"))
+    body = client.get("/api/monitor").json()
+    assert body["available"] is False
+    assert "feature table not found" in body["reason"]
+
+
+def test_monitor_returns_scores_and_miss_grid(tmp_path, monkeypatch):
+    from gpusitter.detection.harness import CandidateSpec, ModelRegistry, run_round
+
+    df = _monitor_feature_df()
+    data = tmp_path / "early_detection.csv"
+    df.to_csv(data, index=False)
+    reg_dir = tmp_path / "reg"
+    reg = ModelRegistry(str(reg_dir))
+    run_round(CandidateSpec("logreg", ("temp_last",)), df, reg, dataset_path=str(data))
+    assert reg.incumbent is not None, "fixture must promote a usable incumbent"
+
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(reg_dir))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(data))
+
+    body = client.get("/api/monitor", params={"budget": 0.10, "horizon": 300.0}).json()
+    assert body["available"] is True
+    assert body["model_version"] >= 1
+    assert body["n_onsets"] == 40
+    assert body["rows"], "per-row scores must be exposed to the dashboard"
+    row = body["rows"][0]
+    assert {"risk_score", "alert_flag", "model_version", "gpu", "t_ref"} <= set(row)
+    grid = body["budgets"][0]["grid"]["by_horizon"]["300"]
+    assert grid["n_onsets"] == 40
+    assert 0.0 <= grid["recall"] <= 1.0
+    # The miss detector actually distinguishes: a skilled incumbent at 10% budget
+    # catches a non-trivial share of onsets (more than the budget floor).
+    assert grid["caught"] > 4, grid

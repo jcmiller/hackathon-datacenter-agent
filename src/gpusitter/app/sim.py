@@ -22,6 +22,12 @@ TRACE_CSV = "data/acme-util/data/job_trace/trace_kalos.csv"
 WARM_START_INCIDENTS = 100
 STEP_SECONDS = 3
 
+# Operational reactive-trigger substrate (bead i6k): the labeled per-GPU feature
+# table (lys/r7j) the incumbent scores — NOT jobs.csv — and the registry holding
+# the usable pickled incumbent. Overridable in tests / on the droplet.
+MONITOR_DATA_PATH = "data/early_detection.parquet"
+MONITOR_REGISTRY_PATH = "models/early_detection"
+
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
 _assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
@@ -116,6 +122,39 @@ def get_model():
     if state:
         return {"model": state}
     return {"model": None, "message": "not yet trained — need ≥1 incident with metrics"}
+
+
+@app.get("/api/monitor")
+def get_monitor(budget: float | None = None, horizon: float | None = None):
+    """Per-row risk scores + alert/miss status from the incumbent (bead i6k).
+
+    Scores the labeled per-GPU feature table (the lys/r7j substrate) with the usable
+    pickled incumbent, derives alert-budget thresholds, and runs the horizon-grid
+    miss detector. Exposes the per-row risk timeline, alert flags, and per-horizon
+    recall (caught onsets / total) to the dashboard. Degrades honestly when the
+    dataset or a persisted incumbent is absent.
+
+    Optional ``budget`` / ``horizon`` query params narrow the budget/horizon grid.
+    """
+    import os
+
+    from ..detection import monitor
+    from ..detection.harness import ModelRegistry, load_dataset
+
+    registry = ModelRegistry(MONITOR_REGISTRY_PATH)
+    if registry.incumbent is None:
+        return {"available": False, "reason": "no persisted incumbent in registry"}
+    if not os.path.exists(MONITOR_DATA_PATH):
+        return {
+            "available": False,
+            "reason": f"feature table not found at {MONITOR_DATA_PATH}",
+            "incumbent": registry.describe_incumbent(),
+        }
+    df = load_dataset(MONITOR_DATA_PATH)
+    scorer = monitor.RowScorer.from_registry(registry)
+    budgets = (budget,) if budget else monitor.DEFAULT_BUDGETS
+    horizons = (horizon,) if horizon else monitor.DEFAULT_HORIZONS_S
+    return monitor.monitor_report(df, scorer, budgets=budgets, horizons_s=horizons)
 
 
 @app.post("/api/feedback")
