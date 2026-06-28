@@ -28,4 +28,4 @@ Source: droplet exploration, embead bead `vf8`.
 - Wide format → melt to long `(t, gpu, metric, value)`.
 
 ## Open beads
-`q2o` ingest · `zxp` mining · `d8z` job↔telemetry RCA join · `p5x` precursors · `6xk` Aug-29 event · `eku` Xid characterization.
+`q2o` ingest · `zxp` mining · `d8z` job↔telemetry RCA join · `p5x` precursors · `6xk` Aug-17 06:00 correlated burst (~116 GPUs; Aug-29/882 debunked) · `eku` Xid characterization.
