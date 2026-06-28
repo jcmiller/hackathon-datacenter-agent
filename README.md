@@ -39,7 +39,7 @@ Python · Google ADK + Gemini 2.5 Flash · FastAPI (SSE) · pandas · pytest.
 ```bash
 pip install -r requirements.txt
 export GOOGLE_API_KEY=...
-uvicorn src.sim:app --reload   # → http://localhost:8000
+uvicorn backend.sim:app --reload   # → http://localhost:8000
 pytest -v
 ```
 
