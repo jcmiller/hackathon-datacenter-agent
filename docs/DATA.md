@@ -15,6 +15,14 @@ All data lands in **`data/`**, which is **gitignored** (too large to commit —
 ~4 GB). The script is idempotent: existing datasets are skipped, so re-running is
 safe and cheap. PAI tarballs are checksum-verified (SHA-256) before extraction.
 
+### DigitalOcean Testing & Storage Setup
+We run our active python services and test suite directly on our DigitalOcean Droplet CPU VM:
+- **Droplet Specs**: 4 GB RAM / 2 Intel vCPUs / 120 GB Storage / SFO3 - Ubuntu 24.04 (LTS) x64 (IP: `134.199.208.214`).
+- **Memory & Swap Configuration**: Cloning large datasets like `acme-util` via Git LFS requires substantial memory when indexing and checking out. The clone process was initially terminated by the Linux Out-Of-Memory (OOM) killer because the VM only had 4 GB of RAM (and no swap space enabled by default).
+  To resolve this, we created and enabled a **16 GB swap file** on the VM.
+- **Disk Optimization via `git lfs fetch`**: The full `acme-util` dataset is ~80 GB. Checking out these files in the working directory while keeping the Git LFS cache would require ~160 GB, exceeding the Droplet's 120 GB disk capacity. To bypass this, the repository was cloned with `GIT_LFS_SKIP_SMUDGE=1` and downloaded using **`git lfs fetch`**. This downloads only the raw cache objects (~80 GB), fitting safely on the VM's disk.
+- **Accessing Cache directly**: We created a utility script `scripts/lfs_helper.py` that lets us read files directly from the `.git/lfs/objects/` cache in Python (e.g. into Pandas) without checking them out, preserving the 0-duplicate footprint. (See [docs/TEAM_GUIDE.md](TEAM_GUIDE.md) for usage details).
+
 ```
 hack/
 ├── scripts/download_datasets.sh

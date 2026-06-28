@@ -20,3 +20,10 @@
 Milestones all addressed. Strong technical foundation with clear self-improvement narrative.
 
 Update as needed post-hackathon.
+
+## Sponsor Tools & Infrastructure Integration
+- **DigitalOcean Spaces (Storage)**: An S3-compatible Spaces bucket (`https://gpu-cluster-trace-datasets.sfo3.digitaloceanspaces.com/`) is available to host our trace datasets.
+- **DigitalOcean Droplet (Compute)**: Runs the GPUSitter active services (monitoring loop, classifier, and self-improver).
+  - Droplet Name: `ubuntu-s-2vcpu-4gb-120gb-intel-sfo3-aie-hack` (IP: `134.199.208.214`).
+  - Storage/Memory Resolution: We download trace datasets directly to the droplet's 120 GB local disk. To resolve VM Out-Of-Memory (OOM) failures during Git LFS operations (cloning `acme-util`), we created and enabled a **16 GB swap file** on the VM.
+- **Orchestration Layer**: Orchestrated via **Antigravity / Gemini 3.5 Flash** for intelligent monitoring, service deployment, and dataset management on the Droplet.
