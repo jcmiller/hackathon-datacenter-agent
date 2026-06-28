@@ -1,4 +1,4 @@
-# EvoSentinel DC Multi-Stage Agentic Architecture
+# GPUSitter Multi-Stage Agentic Architecture
 
 ## High-Level Flow
 ```

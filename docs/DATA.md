@@ -1,6 +1,6 @@
 # Datasets
 
-Real-world GPU-cluster traces that ground EvoSentinel DC's telemetry, failure
+Real-world GPU-cluster traces that ground GPUSitter's telemetry, failure
 classification, and remediation in production data rather than pure simulation.
 
 Fetch everything with:
@@ -94,7 +94,7 @@ df = pd.read_csv("data/pai/pai_sensor_table.csv", names=cols)
 Join keys: `job_name`, `inst_id`, `worker_name`, `machine`.
 **Timestamps are relative seconds** (floats from trace start), *not* wall-clock.
 
-**Most relevant for EvoSentinel:** `pai_sensor_table` (per-worker GPU/mem
+**Most relevant for GPUSitter:** `pai_sensor_table` (per-worker GPU/mem
 utilization → DCGM-style telemetry) and `pai_machine_metric` (per-machine
 health signals). Failure signal: `status` fields (`Failed`, `Terminated`).
 
@@ -114,7 +114,7 @@ state, submit_time, start_time, end_time, duration, queue, gpu_time`.
 **Timestamps are wall-clock ISO** (`2023-03-01 00:18:22+08:00`).
 `state` ∈ {COMPLETED, FAILED, PREEMPTED, CANCELLED, NODE_FAIL, TIMEOUT} — a
 richer failure taxonomy than PAI's single `Failed` bucket; `NODE_FAIL` is the
-hardware-failure signal closest to EvoSentinel's target.
+hardware-failure signal closest to GPUSitter's target.
 
 > The `acme` target pulls only job traces + processed pickles. The raw ~80 GB
 > DCGM/Prometheus/IPMI utilization + power data lives on HuggingFace
@@ -149,7 +149,7 @@ committed directly in-repo:
 
 | Goal | Use |
 |------|-----|
-| GPU telemetry / failure detection (EvoSentinel core) | **PAI** sensor + machine_metric |
+| GPU telemetry / failure detection (GPUSitter core) | **PAI** sensor + machine_metric |
 | LLM-cluster failure/queue dynamics | **Acme** (Kalos = pretraining scale) |
 | Scheduling / GPU bin-packing | **PAI** or **v2023** (K8s) |
 | Inference / serving systems | **v2026-GenAI** |

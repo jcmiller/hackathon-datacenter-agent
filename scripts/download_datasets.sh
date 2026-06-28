@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# download_datasets.sh — fetch real-world GPU-cluster traces for EvoSentinel DC.
+# download_datasets.sh — fetch real-world GPU-cluster traces for GPUSitter.
 #
 # Grounds the simulator/classifier in production DCGM-style telemetry instead of
 # purely synthetic data. Idempotent: re-running skips datasets already present and

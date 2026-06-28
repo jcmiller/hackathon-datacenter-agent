@@ -4,5 +4,5 @@
 from main_loop import run_monitoring_loop
 
 if __name__ == "__main__":
-    print("EvoSentinel DC - Multi-Stage Demo")
+    print("GPUSitter - Multi-Stage Demo")
     run_monitoring_loop(duration_seconds=20)

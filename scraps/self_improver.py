@@ -6,7 +6,7 @@ client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # For self-improvement, use Antigravity or strong model; here skeleton with reflection prompt
 IMPROVER_PROMPT = """
-You are the Self-Improvement Agent for EvoSentinel DC.
+You are the Self-Improvement Agent for GPUSitter.
 
 Full incident trace and outcome:
 {trace}

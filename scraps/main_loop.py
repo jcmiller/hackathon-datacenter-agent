@@ -8,7 +8,7 @@ from classifier import classify_telemetry
 def run_monitoring_loop(duration_seconds: int = 60, interval: float = 2.0):
     """Main monitoring loop: sim -> classifier -> (future: analyzer/self-improve)."""
     dc = DataCenterSimulator()
-    print("Starting EvoSentinel Monitoring Loop...")
+    print("Starting GPUSitter Monitoring Loop...")
     start = time.time()
     while time.time() - start < duration_seconds:
         dc.step()

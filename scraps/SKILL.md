@@ -1,4 +1,4 @@
-# EvoSentinel Skills (Multi-Stage)
+# GPUSitter Skills (Multi-Stage)
 
 ## Classifier Skills (Lightweight)
 - Fast triage of telemetry batches.

@@ -8,3 +8,8 @@ __pycache__/
 .venv/
 venv/
 .env
+
+# embead
+.embead/
+.claude/settings.local.json
+.meld/

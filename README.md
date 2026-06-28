@@ -1,4 +1,4 @@
-# GPU On-Call RCA Agent
+# GPUSitter: On-Call RCA Agent
 
 An AI agent that **automates the GPU-fleet on-call engineer**. When a node fails, it does the triage a human would — pulls telemetry, finds correlated failures, matches past incidents, decides a fix, pages a tech if needed, and logs the resolution. Grounded in real failures, not synthetic data.
 

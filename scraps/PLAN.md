@@ -1,4 +1,4 @@
-# EvoSentinel DC Hackathon Plan & Notes
+# GPUSitter Hackathon Plan & Notes
 
 ## Project Overview
 ... (full previous content)
