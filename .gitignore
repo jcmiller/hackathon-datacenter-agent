@@ -9,7 +9,9 @@ __pycache__/
 venv/
 .env
 
+.claude/
+.codex/
+
 # embead
 .embead/
-.claude/settings.local.json
 .meld/
