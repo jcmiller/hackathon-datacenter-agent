@@ -15,3 +15,7 @@ venv/
 # embead
 .embead/
 .meld/
+DEVELOPMENT.org
+
+# local planning docs (superpowers) — never pushed
+docs/superpowers/
