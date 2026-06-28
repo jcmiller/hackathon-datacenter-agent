@@ -91,6 +91,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="canonical ids ('node#idx') for time-matched controls",
     )
+    p.add_argument(
+        "--gpu-batch-size",
+        type=int,
+        default=150,
+        help="GPUs whose telemetry is loaded at once (caps peak memory; the "
+        "full 851-GPU kalos set OOMs a 15 GB box)",
+    )
     p.add_argument("--out", required=True, help="output path (.parquet or .csv)")
     return p
 
@@ -105,6 +112,7 @@ def main(argv=None) -> int:
         neg_offset_s=args.neg_offset,
         control_gpus=args.control_gpus,
         sample_period_s=args.sample_period,
+        gpu_batch_size=args.gpu_batch_size,
     )
     written = write_dataset(rows, args.out)
     pos = sum(int(r["label"]) for r in rows)

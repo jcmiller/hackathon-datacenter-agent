@@ -1,0 +1,223 @@
+{
+  "data_path": "data/early_detection.csv",
+  "n_rows": 6978,
+  "n_features": 40,
+  "n_positive": 1965,
+  "n_gpus": 685,
+  "horizons_s": [
+    60.0,
+    300.0,
+    600.0
+  ],
+  "split": "strict time-ordered (single t_ref cut; max(train.t_ref) < min(test.t_ref))",
+  "per_horizon": {
+    "60": {
+      "n_train": 1578,
+      "n_test": 748,
+      "pos_train": 522,
+      "pos_test": 133,
+      "models": {
+        "logreg": {
+          "roc_auc": 0.6496118344642092,
+          "avg_precision": 0.23480813497600764,
+          "roc_auc_permuted_baseline": 0.5036065774191576,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.14285714285714285,
+              "recall": 0.007518796992481203,
+              "flagged_positive": 1
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.10810810810810811,
+              "recall": 0.03007518796992481,
+              "flagged_positive": 4
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.14666666666666667,
+              "recall": 0.08270676691729323,
+              "flagged_positive": 11
+            }
+          ]
+        },
+        "hgb": {
+          "roc_auc": 0.586527293844367,
+          "avg_precision": 0.2594573404645463,
+          "roc_auc_permuted_baseline": 0.520759215110948,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.5714285714285714,
+              "recall": 0.03007518796992481,
+              "flagged_positive": 4
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.32432432432432434,
+              "recall": 0.09022556390977443,
+              "flagged_positive": 12
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.30666666666666664,
+              "recall": 0.17293233082706766,
+              "flagged_positive": 23
+            }
+          ]
+        }
+      }
+    },
+    "300": {
+      "n_train": 1578,
+      "n_test": 748,
+      "pos_train": 522,
+      "pos_test": 133,
+      "models": {
+        "logreg": {
+          "roc_auc": 0.6527293844367016,
+          "avg_precision": 0.25072995230212214,
+          "roc_auc_permuted_baseline": 0.5401537380035454,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.0,
+              "recall": 0.0,
+              "flagged_positive": 0
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.16216216216216217,
+              "recall": 0.045112781954887216,
+              "flagged_positive": 6
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.22666666666666666,
+              "recall": 0.12781954887218044,
+              "flagged_positive": 17
+            }
+          ]
+        },
+        "hgb": {
+          "roc_auc": 0.5787150803838865,
+          "avg_precision": 0.22798746335132342,
+          "roc_auc_permuted_baseline": 0.4924919004829146,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.2857142857142857,
+              "recall": 0.015037593984962405,
+              "flagged_positive": 2
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.2702702702702703,
+              "recall": 0.07518796992481203,
+              "flagged_positive": 10
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.24,
+              "recall": 0.13533834586466165,
+              "flagged_positive": 18
+            }
+          ]
+        }
+      }
+    },
+    "600": {
+      "n_train": 1578,
+      "n_test": 748,
+      "pos_train": 522,
+      "pos_test": 133,
+      "models": {
+        "logreg": {
+          "roc_auc": 0.6410783055198973,
+          "avg_precision": 0.2404273065225254,
+          "roc_auc_permuted_baseline": 0.49026071275750344,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.2857142857142857,
+              "recall": 0.015037593984962405,
+              "flagged_positive": 2
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.16216216216216217,
+              "recall": 0.045112781954887216,
+              "flagged_positive": 6
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.17333333333333334,
+              "recall": 0.09774436090225563,
+              "flagged_positive": 13
+            }
+          ]
+        },
+        "hgb": {
+          "roc_auc": 0.5604376795647655,
+          "avg_precision": 0.22208685623185973,
+          "roc_auc_permuted_baseline": 0.4766283085763188,
+          "roc_auc_permuted_n": 8,
+          "base_rate": 0.17780748663101603,
+          "alert_budget": [
+            {
+              "budget": 0.01,
+              "k": 7,
+              "precision": 0.2857142857142857,
+              "recall": 0.015037593984962405,
+              "flagged_positive": 2
+            },
+            {
+              "budget": 0.05,
+              "k": 37,
+              "precision": 0.2972972972972973,
+              "recall": 0.08270676691729323,
+              "flagged_positive": 11
+            },
+            {
+              "budget": 0.1,
+              "k": 75,
+              "precision": 0.28,
+              "recall": 0.15789473684210525,
+              "flagged_positive": 21
+            }
+          ]
+        }
+      }
+    }
+  },
+  "stratified_random_smoke": {
+    "logreg": 0.6725184875429175,
+    "hgb": 0.8732315784840214
+  }
+}

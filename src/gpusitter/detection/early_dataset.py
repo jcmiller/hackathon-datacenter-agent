@@ -230,6 +230,7 @@ def build_dataset(
     control_gpus: Sequence[str] | None = None,
     sample_period_s: float = 15.0,
     alias: Mapping[str, str] | None = None,
+    gpu_batch_size: int = 150,
 ) -> list[dict]:
     """Build labeled prediction-point rows from resolved metric CSV paths.
 
@@ -245,6 +246,15 @@ def build_dataset(
     when ``neg_offset_s < horizon_s``. Rows with no telemetry coverage in any
     feature metric are dropped. ``alias`` normalizes foreign GPU namespaces for
     the feature store (onsets use the IP-named XID file directly).
+
+    **Memory bound (``gpu_batch_size``).** ``TelemetryStore`` indexes every
+    observed cell of every loaded GPU's *full* timeline as Python objects; on
+    real kalos (851 onset GPUs over a 15-day trace) loading them all at once
+    needs >14 GB and OOM-kills a 15 GB box. We therefore load telemetry in
+    batches of ``gpu_batch_size`` GPUs, emit those GPUs' rows, and drop the store
+    before the next batch — bounding peak memory to one batch's timelines. This
+    streams the feature CSVs once per batch (I/O for memory); output rows are
+    identical to a single-store build. Set huge to force a single load.
     """
     if XID_METRIC not in sources:
         raise ValueError(f"sources must include {XID_METRIC!r} to derive labels")
@@ -282,22 +292,33 @@ def build_dataset(
                     negatives[key] = gpu
 
     candidates: dict[tuple[str, datetime, float], GpuId] = {**positives, **negatives}
-    sample_gpus = sorted({c[0] for c in candidates})
+    # Group candidate keys by GPU so each GPU's telemetry is loaded exactly once,
+    # in a single batch, then released.
+    by_gpu: dict[str, list[tuple[tuple[str, datetime, float], GpuId]]] = {}
+    for key, gpu in candidates.items():
+        by_gpu.setdefault(key[0], []).append((key, gpu))
+    sample_gpus = sorted(by_gpu)
     feature_sources = {m: sources[m] for m in feature_metrics}
-    store = TelemetryStore.load(feature_sources, gpus=sample_gpus, alias=alias)
 
-    cache: dict[tuple[str, str], tuple[list[datetime], list[float]]] = {}
+    batch = gpu_batch_size if gpu_batch_size and gpu_batch_size > 0 else len(sample_gpus)
     rows: list[dict] = []
-    for (canonical, t_ref, h), gpu in sorted(
-        candidates.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])
-    ):
-        label = _label(canonical, t_ref, h, onsets_by_gpu)
-        row, any_present = _row(
-            gpu, t_ref, h, lookback_s, label, feature_metrics, store, cache, sample_period_s
-        )
-        if not any_present:
-            continue  # no telemetry in the lookback window -> not a usable point
-        rows.append(row)
+    for start in range(0, len(sample_gpus), max(1, batch)):
+        batch_gpus = sample_gpus[start : start + batch]
+        store = TelemetryStore.load(feature_sources, gpus=batch_gpus, alias=alias)
+        cache: dict[tuple[str, str], tuple[list[datetime], list[float]]] = {}
+        for canonical in batch_gpus:
+            for key, gpu in by_gpu[canonical]:
+                _, t_ref, h = key
+                label = _label(canonical, t_ref, h, onsets_by_gpu)
+                row, any_present = _row(
+                    gpu, t_ref, h, lookback_s, label, feature_metrics, store, cache, sample_period_s
+                )
+                if not any_present:
+                    continue  # no telemetry in lookback window -> unusable point
+                rows.append(row)
+        del store, cache  # release this batch's timelines before the next load
+
+    rows.sort(key=lambda r: (r["t_ref"], r["gpu"], r["horizon_s"]))
     return rows
 
 
