@@ -1,5 +1,8 @@
+import logging
 import re
 from collections.abc import Generator
+
+_log = logging.getLogger(__name__)
 
 from google.adk.agents import Agent
 from google.adk.runners import InMemoryRunner
@@ -76,8 +79,11 @@ def triage_stream(incident: dict) -> Generator[dict]:
     ticket_num = None
     all_obs_text = ""
 
+    inc_id = incident.get("id", "?")
+    _log.info("triage start  incident=%s model=gemini-2.5-flash", inc_id)
     for ev in runner.run(user_id="demo", session_id=session.id, new_message=msg):
         for tc in ev.get_function_calls():
+            _log.info("triage tool   incident=%s tool=%s", inc_id, tc.name)
             yield {"type": "tool_call", "tool": tc.name, "args": str(tc.args)}
 
         responses = ev.get_function_responses()
@@ -108,6 +114,7 @@ def triage_stream(incident: dict) -> Generator[dict]:
     elif ticket_num or re.search(r"\bpage\b.*technician", final_text.lower()):
         disp = "PAGE_TECHNICIAN"
 
+    _log.info("triage done   incident=%s disposition=%s", inc_id, disp)
     yield {
         "type": "disposition",
         "disposition": disp,

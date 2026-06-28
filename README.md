@@ -165,7 +165,7 @@ pip install -e .
 # 5. Restart the server
 pkill -f uvicorn || true
 nohup env PYTHONPATH=src GOOGLE_API_KEY="$(cat .env | grep GOOGLE_API_KEY | cut -d= -f2)" \
-  uvicorn gpusitter.app.sim:app --host 0.0.0.0 --port 8000 \
+  uvicorn gpusitter.app.sim:app --host 0.0.0.0 --port 8000 --log-config log_config.json \
   > /tmp/uvicorn.log 2>&1 &
 disown
 ```
