@@ -94,7 +94,9 @@ def main() -> int:
         _print_status([raw_data_status(args.repo_dir, path) for path in args.file_path], args.json)
         return 0
     if args.command == "kalos-status":
-        statuses = [raw_data_status(args.repo_dir, path) for path in kalos_metric_paths(args.metrics)]
+        statuses = [
+            raw_data_status(args.repo_dir, path) for path in kalos_metric_paths(args.metrics)
+        ]
         _print_status(statuses, args.json)
         return 0
     raise AssertionError(args.command)

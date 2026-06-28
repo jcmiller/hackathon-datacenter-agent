@@ -8,9 +8,8 @@ back empty (samples:0). See bead 65e (timestamp seam).
 """
 
 from datetime import datetime, timedelta
-from typing import Union
 
-TimeValue = Union[float, datetime]
+TimeValue = float | datetime
 
 
 def parse_time_value(value) -> TimeValue:

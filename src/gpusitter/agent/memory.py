@@ -1,13 +1,15 @@
-import json, math, os
-from typing import Optional
+import json
+import math
+import os
 
 _SOP_VECTORS = "data/sop_vectors.json"
 
 
-def _embed(text: str) -> Optional[list[float]]:
+def _embed(text: str) -> list[float] | None:
     """Embed text via Gemini embedding model. Returns None if API unavailable."""
     try:
         from google import genai
+
         client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
         result = client.models.embed_content(model="gemini-embedding-001", contents=text)
         return list(result.embeddings[0].values)
@@ -16,31 +18,33 @@ def _embed(text: str) -> Optional[list[float]]:
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=False))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
     return dot / (na * nb) if na and nb else 0.0
 
 
-def _load_vectors() -> list[Optional[list[float]]]:
+def _load_vectors() -> list[list[float] | None]:
     if not os.path.exists(_SOP_VECTORS):
         return []
     with open(_SOP_VECTORS) as f:
         return json.load(f)
 
 
-def _save_vectors(vectors: list[Optional[list[float]]]) -> None:
+def _save_vectors(vectors: list[list[float] | None]) -> None:
     os.makedirs(os.path.dirname(_SOP_VECTORS) or ".", exist_ok=True)
     with open(_SOP_VECTORS, "w") as f:
         json.dump(vectors, f)
 
 
 def _record_text(r: dict) -> str:
-    return f"{r.get('type','')} {r.get('summary','')} {r.get('resolution','')}".strip()
+    return f"{r.get('type', '')} {r.get('summary', '')} {r.get('resolution', '')}".strip()
 
 
 def search_incidents(query: str, path: str = "data/sop.json", top_k: int = 3) -> list[dict]:
-    """Semantic search over past incidents. Falls back to substring match if embeddings unavailable."""
+    """Semantic search over past incidents.
+
+    Falls back to substring match if embeddings unavailable."""
     if not os.path.exists(path):
         return []
     with open(path) as f:
@@ -67,16 +71,10 @@ def search_incidents(query: str, path: str = "data/sop.json", top_k: int = 3) ->
         return hits[:top_k]
 
     scored = [
-        (i, _cosine(query_vec, vectors[i]))
-        for i in range(len(records))
-        if vectors[i] is not None
+        (i, _cosine(query_vec, vectors[i])) for i in range(len(records)) if vectors[i] is not None
     ]
     scored.sort(key=lambda x: x[1], reverse=True)
-    return [
-        {"similarity": round(s, 3), **records[i]}
-        for i, s in scored[:top_k]
-        if s > 0.4
-    ]
+    return [{"similarity": round(s, 3), **records[i]} for i, s in scored[:top_k] if s > 0.4]
 
 
 def append_incident(record: dict, path: str = "data/sop.json") -> None:

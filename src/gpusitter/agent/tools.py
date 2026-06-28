@@ -1,9 +1,7 @@
 import os
 from datetime import datetime, timedelta
 
-from ..detection import stream
-from ..detection import dataset
-from ..detection import classifier
+from ..detection import classifier, dataset, stream
 from ..rca.job_join import (
     correlated_jobs,
     load_incidents,
@@ -16,10 +14,10 @@ from ..telemetry.sources import (
 )
 from ..telemetry.timeparse import parse_time_value, window_bounds
 from ..telemetry.window import window_stats
-from .memory import search_incidents, append_incident
+from .memory import append_incident, search_incidents
 
-TRACE_CSV        = "data/acme-util/data/job_trace/trace_kalos.csv"
-SOP_PATH         = "data/sop.json"
+TRACE_CSV = "data/acme-util/data/job_trace/trace_kalos.csv"
+SOP_PATH = "data/sop.json"
 MODEL_STATE_PATH = "data/model_state.json"
 _TICKET = {"n": 0}
 _pending_updates: list[dict] = []
@@ -71,10 +69,7 @@ def get_telemetry(fail_time, window=120):
     CSVs (LFS-cache resolved). Each value is a window aggregate plus provenance,
     or ``available: False`` when the raw data is not materialized here."""
     lo, hi = window_bounds(fail_time, window)
-    return {
-        field: _metric_stats(metric, lo, hi)
-        for field, metric in DCGM_FIELD_TO_METRIC.items()
-    }
+    return {field: _metric_stats(metric, lo, hi) for field, metric in DCGM_FIELD_TO_METRIC.items()}
 
 
 def find_correlated_failures(fail_time, window=120, source="jobs"):
@@ -116,9 +111,7 @@ def find_correlated_failures(fail_time, window=120, source="jobs"):
         span = timedelta(seconds=window)
         lo, hi = center - span, center + span
         hits = [
-            (t, gpu, code)
-            for (t, gpu, code) in stream_xid_onset_records(xid_path)
-            if lo <= t <= hi
+            (t, gpu, code) for (t, gpu, code) in stream_xid_onset_records(xid_path) if lo <= t <= hi
         ]
         gpus = sorted({gpu for _, gpu, _ in hits})
         codes = sorted({_xid_code(code) for _, _, code in hits})
@@ -147,11 +140,17 @@ def check_degradation_trend(fail_time, lookback_hours: int = 4):
         start = center - lookback_hours * 3600
         end = center
     power = _metric_stats("POWER_USAGE", start, end)
-    temp  = _metric_stats("GPU_TEMP", start, end)
-    spike = (round(power["max"] / power["mean"], 2)
-             if power.get("available") and power.get("mean", 0) > 0 else 0.0)
-    rise  = (round(temp["max"] - temp["min"], 1)
-             if temp.get("available") and temp.get("samples", 0) > 0 else 0.0)
+    temp = _metric_stats("GPU_TEMP", start, end)
+    spike = (
+        round(power["max"] / power["mean"], 2)
+        if power.get("available") and power.get("mean", 0) > 0
+        else 0.0
+    )
+    rise = (
+        round(temp["max"] - temp["min"], 1)
+        if temp.get("available") and temp.get("samples", 0) > 0
+        else 0.0
+    )
     return {
         "lookback_hours": lookback_hours,
         "power": power,
@@ -172,15 +171,19 @@ def search_past_incidents(incident_description: str):
 def page_technician(node_info, reason):
     """Simulate paging a datacenter technician."""
     _TICKET["n"] += 1
-    return {"paged": True, "ticket": f"TKT-{_TICKET['n']:04d}",
-            "node": node_info, "reason": reason}
+    return {"paged": True, "ticket": f"TKT-{_TICKET['n']:04d}", "node": node_info, "reason": reason}
 
 
-def record_resolution(incident_type, summary, disposition, resolution,
-                      incident_id: str = "",
-                      power_spike_ratio: float = 0.0,
-                      temp_rise_C: float = 0.0,
-                      correlated_count: int = 0):
+def record_resolution(
+    incident_type,
+    summary,
+    disposition,
+    resolution,
+    incident_id: str = "",
+    power_spike_ratio: float = 0.0,
+    temp_rise_C: float = 0.0,
+    correlated_count: int = 0,
+):
     """Append this incident + resolution to the SOP memory.
     Pass telemetry metrics so the system can learn to predict dispositions from signals."""
     metrics = {
@@ -188,9 +191,14 @@ def record_resolution(incident_type, summary, disposition, resolution,
         "temp_rise_C": temp_rise_C,
         "correlated_count": correlated_count,
     }
-    entry = {"type": incident_type, "summary": summary,
-             "disposition": disposition, "resolution": resolution,
-             "incident_id": incident_id, "metrics": metrics}
+    entry = {
+        "type": incident_type,
+        "summary": summary,
+        "disposition": disposition,
+        "resolution": resolution,
+        "incident_id": incident_id,
+        "metrics": metrics,
+    }
     append_incident(entry, SOP_PATH)
     _pending_updates.append({"path": SOP_PATH, "entry": entry})
     return {"recorded": True}
@@ -214,9 +222,15 @@ def _train_over_history(model_type, features):
     val_auc = classifier.auc(est, Xval, yval)
     incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
     promoted = classifier.maybe_promote(est, model_type, features, val_auc)
-    return {"trained": True, "model_type": model_type, "features": features,
-            "val_auc": val_auc, "incumbent_auc": incumbent_auc,
-            "promoted": promoted, "version": classifier.INCUMBENT.version}
+    return {
+        "trained": True,
+        "model_type": model_type,
+        "features": features,
+        "val_auc": val_auc,
+        "incumbent_auc": incumbent_auc,
+        "promoted": promoted,
+        "version": classifier.INCUMBENT.version,
+    }
 
 
 def train_and_validate(model_type: str = "logreg", features=None):
@@ -236,6 +250,7 @@ def train_and_validate(model_type: str = "logreg", features=None):
     if features is not None:
         return _train_over_history(model_type, features)
     import json
+
     if not os.path.exists(SOP_PATH):
         return {"trained": False, "reason": "no SOP entries yet"}
     with open(SOP_PATH) as f:
@@ -251,17 +266,22 @@ def train_and_validate(model_type: str = "logreg", features=None):
         val_auc = round(classifier.auc_from_lists(est, Xval, yval), 3)
 
     incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
-    should_promote = (classifier.INCUMBENT is None or
-                      (val_auc is not None and val_auc > incumbent_auc))
+    should_promote = classifier.INCUMBENT is None or (
+        val_auc is not None and val_auc > incumbent_auc
+    )
     promoted = False
     if should_promote:
         promoted = classifier.maybe_promote(est, model_type, features, val_auc or 0.0, len(X))
         if promoted:
             classifier.save_state(MODEL_STATE_PATH)
     return {
-        "trained": True, "model_type": model_type, "features": features,
-        "val_auc": val_auc, "incumbent_auc": round(incumbent_auc, 3) if incumbent_auc else None,
-        "promoted": promoted, "n_samples": len(X),
+        "trained": True,
+        "model_type": model_type,
+        "features": features,
+        "val_auc": val_auc,
+        "incumbent_auc": round(incumbent_auc, 3) if incumbent_auc else None,
+        "promoted": promoted,
+        "n_samples": len(X),
         "version": classifier.INCUMBENT.version if classifier.INCUMBENT else 0,
         "note": "no holdout yet — need more varied incidents for AUC" if val_auc is None else None,
     }

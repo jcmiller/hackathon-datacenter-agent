@@ -15,16 +15,13 @@ from gpusitter.telemetry import sources
 GOOD_CSV = "Time,172.31.0.5-3,172.31.0.6-1\n2023-08-15 15:30:00+08:00,0.0,43.0\n"
 
 OID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-POINTER = (
-    "version https://git-lfs.github.com/spec/v1\n"
-    f"oid sha256:{OID}\n"
-    "size 11\n"
-)
+POINTER = f"version https://git-lfs.github.com/spec/v1\noid sha256:{OID}\nsize 11\n"
 
 
 def _git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True,
-                          capture_output=True, text=True)
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True
+    )
 
 
 def _kalos_dir(repo):
@@ -85,7 +82,9 @@ def test_resolve_metric_csv_uses_module_repo_dir(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     (_kalos_dir(repo) / "GPU_UTIL.csv").write_text(GOOD_CSV)
     monkeypatch.setattr(sources, "REPO_DIR", repo)
-    assert sources.resolve_metric_csv("GPU_UTIL") == str(repo / "data/utilization/kalos/GPU_UTIL.csv")
+    assert sources.resolve_metric_csv("GPU_UTIL") == str(
+        repo / "data/utilization/kalos/GPU_UTIL.csv"
+    )
 
 
 # --- validate_timeseries_csv (fail-loud) ----------------------------------------

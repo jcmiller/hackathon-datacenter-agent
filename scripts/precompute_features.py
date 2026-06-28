@@ -14,12 +14,25 @@ Data reality (see docs/DATA.md):
 - Aggregates are taken over ALL GPU columns in the window (not just the job's GPUs). Per-job GPU
   attribution needs node/GPU id normalization (ids are inconsistent across metrics) and is deferred.
 """
+
 import pandas as pd
 
-_META = ["job_id", "type", "node_num", "gpu_num", "cpu_num", "duration",
-         "queue", "mem_per_pod_GB", "state", "start_time", "end_time", "fail_time"]
+_META = [
+    "job_id",
+    "type",
+    "node_num",
+    "gpu_num",
+    "cpu_num",
+    "duration",
+    "queue",
+    "mem_per_pod_GB",
+    "state",
+    "start_time",
+    "end_time",
+    "fail_time",
+]
 _AGG = ["mean", "max", "std"]
-_ZERO = {a: 0.0 for a in _AGG}
+_ZERO = dict.fromkeys(_AGG, 0.0)
 
 
 def _window_aggs(signal_df, start, end):
@@ -46,8 +59,11 @@ def precompute_jobs(trace_csv, power_csv, temp_csv, util_csv, out_csv):
     trace = pd.read_csv(trace_csv)
     trace["start_time"] = pd.to_datetime(trace["start_time"], utc=True)
     trace["end_time"] = pd.to_datetime(trace["end_time"], utc=True)
-    signals = {"power": _load_signal(power_csv), "temp": _load_signal(temp_csv),
-               "util": _load_signal(util_csv)}
+    signals = {
+        "power": _load_signal(power_csv),
+        "temp": _load_signal(temp_csv),
+        "util": _load_signal(util_csv),
+    }
     rows = []
     for _, j in trace.iterrows():
         row = {k: j.get(k) for k in _META}

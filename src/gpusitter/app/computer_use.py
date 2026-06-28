@@ -8,13 +8,13 @@ Flow per turn:
   4. Execute each action on the live browser page
   5. Yield SSE-compatible event dicts; repeat for up to MAX_TURNS
 """
+
 import asyncio
 import base64
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
-from google.genai import Client
-from google.genai import types
+from google.genai import Client, types
 
 DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "http://localhost:8000")
 MODEL = "gemini-3.5-flash"
@@ -32,9 +32,7 @@ DEFAULT_TASK = (
 )
 
 _COMPUTER_USE_TOOL = types.Tool(
-    computer_use=types.ComputerUse(
-        environment=types.Environment.ENVIRONMENT_BROWSER
-    )
+    computer_use=types.ComputerUse(environment=types.Environment.ENVIRONMENT_BROWSER)
 )
 
 _CONFIG = types.GenerateContentConfig(
@@ -97,7 +95,7 @@ async def _execute_action(page, name: str, args: dict) -> str:
 
         if name in ("drag", "drag_and_drop"):
             start = args.get("start_coordinate") or [args.get("start_x", 0), args.get("start_y", 0)]
-            end   = args.get("end_coordinate")   or [args.get("end_x", 0),   args.get("end_y", 0)]
+            end = args.get("end_coordinate") or [args.get("end_x", 0), args.get("end_y", 0)]
             await page.mouse.move(float(start[0]), float(start[1]))
             await page.mouse.down()
             await page.mouse.move(float(end[0]), float(end[1]))
@@ -120,7 +118,7 @@ async def _execute_action(page, name: str, args: dict) -> str:
 
 async def run_session(
     task: str | None = None,
-) -> AsyncGenerator[dict, None]:
+) -> AsyncGenerator[dict]:
     """
     Yield SSE-compatible event dicts for one computer-use session.
 
@@ -185,10 +183,23 @@ async def run_session(
 
                         result = await _execute_action(page, name, args)
                         acted = True
-                        yield {"type": "action", "name": name, "args": args, "result": result, "turn": turn}
+                        yield {
+                            "type": "action",
+                            "name": name,
+                            "args": args,
+                            "result": result,
+                            "turn": turn,
+                        }
 
                         # Take fresh screenshot for screenshot actions or after any click
-                        if name in ("screenshot", "take_screenshot", "capture_screenshot", "click", "left_click", "single_click"):
+                        if name in (
+                            "screenshot",
+                            "take_screenshot",
+                            "capture_screenshot",
+                            "click",
+                            "left_click",
+                            "single_click",
+                        ):
                             await asyncio.sleep(1.5)  # let UI settle
                             raw, b64 = await _screenshot(page)
                             yield {"type": "screenshot", "data": b64, "turn": turn}
@@ -215,9 +226,7 @@ async def run_session(
                     raw, b64 = await _screenshot(page)
                     yield {"type": "screenshot", "data": b64, "turn": turn}
                     tool_result_parts.append(_image_part(raw))
-                    contents.append(
-                        types.Content(role="user", parts=tool_result_parts)
-                    )
+                    contents.append(types.Content(role="user", parts=tool_result_parts))
                 else:
                     break
 

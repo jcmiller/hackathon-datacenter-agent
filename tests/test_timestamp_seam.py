@@ -22,11 +22,11 @@ def test_get_telemetry_accepts_iso_time(tmp_path, monkeypatch):
         "Time,n1\n"
         "2023-08-15 15:30:00+08:00,10\n"
         "2023-08-15 15:30:30+08:00,90\n"
-        "2023-08-15 15:32:00+08:00,10\n"   # outside +/-60s window
+        "2023-08-15 15:32:00+08:00,10\n"  # outside +/-60s window
     )
     monkeypatch.setattr(tools, "resolve_metric_csv", lambda metric, **kw: str(pw))
     out = tools.get_telemetry(fail_time=ISO, window=60)
-    assert out["DCGM_FI_DEV_POWER_USAGE"]["samples"] == 2   # not 0 (silent-skip bug)
+    assert out["DCGM_FI_DEV_POWER_USAGE"]["samples"] == 2  # not 0 (silent-skip bug)
     assert out["DCGM_FI_DEV_POWER_USAGE"]["max"] == 90
 
 
@@ -35,7 +35,7 @@ def test_find_correlated_failures_accepts_iso_fail_time(tmp_path, monkeypatch):
     p.write_text(
         "job_id,type,state,fail_time,node_num,gpu_num,duration,user\n"
         "a,train,NODE_FAIL,2023-08-15 15:30:00+08:00,1,8,1,u\n"
-        "b,train,NODE_FAIL,2023-08-15 15:31:00+08:00,1,8,1,u\n"   # 60s later
+        "b,train,NODE_FAIL,2023-08-15 15:31:00+08:00,1,8,1,u\n"  # 60s later
     )
     monkeypatch.setattr(tools, "TRACE_CSV", str(p))
     out = tools.find_correlated_failures(fail_time="2023-08-15 15:30:00+08:00", window=120)

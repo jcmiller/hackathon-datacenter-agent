@@ -11,7 +11,6 @@ import textwrap
 
 import pytest
 
-
 # GPU_TEMP — IP-named, 3 GPUs, 2 timestamps, 2 empty cells (idle GPUs).
 #   wide: 3 cols x 2 rows = 6 cells; 4 non-empty -> 4 long records.
 GPU_TEMP_CSV = textwrap.dedent(

@@ -33,8 +33,9 @@ and are tested independently —
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Tuple
+from typing import NamedTuple
 
 import numpy as np
 
@@ -48,10 +49,8 @@ XID_METRIC = "XID_ERRORS"
 # exists; MEM_CLOCK optional). Mirrors the lys design's initial metric set.
 DEFAULT_FEATURE_METRICS = ("GPU_TEMP", "POWER_USAGE", "GPU_UTIL", "MEMORY_TEMP")
 
-_STATS = ("count", "coverage", "present", "mean", "std", "min", "max",
-          "last", "delta", "slope")
-_META_COLS = ("gpu", "node", "gpu_idx", "t_ref", "event_source",
-              "horizon_s", "lookback_s", "label")
+_STATS = ("count", "coverage", "present", "mean", "std", "min", "max", "last", "delta", "slope")
+_META_COLS = ("gpu", "node", "gpu_idx", "t_ref", "event_source", "horizon_s", "lookback_s", "label")
 
 
 # --- Xid onset detection -----------------------------------------------------
@@ -64,7 +63,7 @@ class OnsetEvent(NamedTuple):
     t: datetime
 
 
-def xid_onsets(path: str) -> List[OnsetEvent]:
+def xid_onsets(path: str) -> list[OnsetEvent]:
     """Empty-aware Xid onsets from a wide XID_ERRORS CSV.
 
     Delegates to the nav-approved ``stream_xid_onsets`` (rca.job_join) so the
@@ -73,8 +72,9 @@ def xid_onsets(path: str) -> List[OnsetEvent]:
     cell). Crucially this catches idle(empty) -> fault transitions that the
     empty-skipping long-record reader would miss.
     """
-    return [OnsetEvent(gpu=_parse_canonical(canonical), t=t)
-            for t, canonical in stream_xid_onsets(path)]
+    return [
+        OnsetEvent(gpu=_parse_canonical(canonical), t=t) for t, canonical in stream_xid_onsets(path)
+    ]
 
 
 # --- Windowed features (pre-reference; missingness explicit) -----------------
@@ -86,7 +86,7 @@ def _window_from_arrays(
     t_ref: datetime,
     lookback_s: float,
     sample_period_s: float = 15.0,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Aggregate ``[t_ref - lookback, t_ref]`` from time-sorted parallel arrays.
 
     ``times`` must be ascending; the window is located with two binary searches
@@ -101,12 +101,20 @@ def _window_from_arrays(
     expected = lookback_s / sample_period_s + 1.0 if sample_period_s > 0 else 0.0
     if j <= i:
         nan = float("nan")
-        return {"count": 0, "coverage": 0.0, "present": 0, "mean": nan,
-                "std": nan, "min": nan, "max": nan, "last": nan,
-                "delta": nan, "slope": nan}
+        return {
+            "count": 0,
+            "coverage": 0.0,
+            "present": 0,
+            "mean": nan,
+            "std": nan,
+            "min": nan,
+            "max": nan,
+            "last": nan,
+            "delta": nan,
+            "slope": nan,
+        }
     vals = np.array(values[i:j], dtype="float64")
-    secs = np.array([(times[k] - t_ref).total_seconds() for k in range(i, j)],
-                    dtype="float64")
+    secs = np.array([(times[k] - t_ref).total_seconds() for k in range(i, j)], dtype="float64")
     slope = float(np.polyfit(secs, vals, 1)[0]) if len(vals) >= 2 else float("nan")
     return {
         "count": int(len(vals)),
@@ -123,12 +131,12 @@ def _window_from_arrays(
 
 
 def window_features(
-    series: Sequence[Tuple[datetime, float]],
+    series: Sequence[tuple[datetime, float]],
     t_ref: datetime,
     lookback_s: float,
     *,
     sample_period_s: float = 15.0,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Convenience wrapper over :func:`_window_from_arrays` taking ``[(t, v)]``.
 
     Sorts defensively, then delegates to the binary-search core; used by tests
@@ -138,15 +146,14 @@ def window_features(
     pairs = sorted(series, key=lambda kv: kv[0])
     times = [t for t, _ in pairs]
     values = [v for _, v in pairs]
-    return _window_from_arrays(times, values, t_ref, lookback_s,
-                               sample_period_s=sample_period_s)
+    return _window_from_arrays(times, values, t_ref, lookback_s, sample_period_s=sample_period_s)
 
 
 # --- Dataset assembly --------------------------------------------------------
 
 
-def _onsets_by_gpu(onsets: Iterable[OnsetEvent]) -> Dict[str, List[datetime]]:
-    by_gpu: Dict[str, List[datetime]] = {}
+def _onsets_by_gpu(onsets: Iterable[OnsetEvent]) -> dict[str, list[datetime]]:
+    by_gpu: dict[str, list[datetime]] = {}
     for o in onsets:
         by_gpu.setdefault(o.gpu.canonical, []).append(o.t)
     for times in by_gpu.values():
@@ -154,37 +161,60 @@ def _onsets_by_gpu(onsets: Iterable[OnsetEvent]) -> Dict[str, List[datetime]]:
     return by_gpu
 
 
-def _label(gpu_canonical: str, t_ref: datetime, horizon_s: float,
-           onsets_by_gpu: Mapping[str, List[datetime]]) -> int:
+def _label(
+    gpu_canonical: str,
+    t_ref: datetime,
+    horizon_s: float,
+    onsets_by_gpu: Mapping[str, list[datetime]],
+) -> int:
     """1 iff an onset for this GPU falls in the prediction horizon ``(t_ref, t_ref+H]``."""
     hi = t_ref + timedelta(seconds=horizon_s)
     return int(any(t_ref < t <= hi for t in onsets_by_gpu.get(gpu_canonical, ())))
 
 
-def _series_arrays(store: TelemetryStore, metric: str, gpu: str,
-                   cache: Dict[Tuple[str, str], Tuple[List[datetime], List[float]]]):
+def _series_arrays(
+    store: TelemetryStore,
+    metric: str,
+    gpu: str,
+    cache: dict[tuple[str, str], tuple[list[datetime], list[float]]],
+):
     key = (metric, gpu)
     if key not in cache:
-        pairs = sorted(((_parse_iso(t), v) for t, v in store.series(metric, gpu)),
-                       key=lambda kv: kv[0])
+        pairs = sorted(
+            ((_parse_iso(t), v) for t, v in store.series(metric, gpu)), key=lambda kv: kv[0]
+        )
         cache[key] = ([t for t, _ in pairs], [v for _, v in pairs])
     return cache[key]
 
 
-def _row(gpu: GpuId, t_ref: datetime, horizon_s: float, lookback_s: float,
-         label: int, feature_metrics: Sequence[str], store: TelemetryStore,
-         cache, sample_period_s: float) -> Tuple[dict, bool]:
+def _row(
+    gpu: GpuId,
+    t_ref: datetime,
+    horizon_s: float,
+    lookback_s: float,
+    label: int,
+    feature_metrics: Sequence[str],
+    store: TelemetryStore,
+    cache,
+    sample_period_s: float,
+) -> tuple[dict, bool]:
     """Build one output row; second element is True if any metric had coverage."""
     row = {
-        "gpu": gpu.canonical, "node": gpu.node, "gpu_idx": gpu.index,
-        "t_ref": t_ref.isoformat(), "event_source": XID_METRIC,
-        "horizon_s": horizon_s, "lookback_s": lookback_s, "label": label,
+        "gpu": gpu.canonical,
+        "node": gpu.node,
+        "gpu_idx": gpu.index,
+        "t_ref": t_ref.isoformat(),
+        "event_source": XID_METRIC,
+        "horizon_s": horizon_s,
+        "lookback_s": lookback_s,
+        "label": label,
     }
     any_present = False
     for metric in feature_metrics:
         times, values = _series_arrays(store, metric, gpu.canonical, cache)
-        feats = _window_from_arrays(times, values, t_ref, lookback_s,
-                                    sample_period_s=sample_period_s)
+        feats = _window_from_arrays(
+            times, values, t_ref, lookback_s, sample_period_s=sample_period_s
+        )
         any_present = any_present or bool(feats["present"])
         for stat in _STATS:
             row[f"{metric}_{stat}"] = feats[stat]
@@ -197,10 +227,10 @@ def build_dataset(
     horizons_s: Sequence[float],
     lookback_s: float,
     neg_offset_s: float = 3600.0,
-    control_gpus: Optional[Sequence[str]] = None,
+    control_gpus: Sequence[str] | None = None,
     sample_period_s: float = 15.0,
-    alias: Optional[Mapping[str, str]] = None,
-) -> List[dict]:
+    alias: Mapping[str, str] | None = None,
+) -> list[dict]:
     """Build labeled prediction-point rows from resolved metric CSV paths.
 
     ``sources`` maps metric name -> readable CSV path (already cache-safe; the
@@ -227,12 +257,12 @@ def build_dataset(
 
     # Positives: keyed (canonical, t_ref, horizon) -> GpuId. A positive's label
     # is 1 by construction (the onset sits at t_ref + H).
-    positives: Dict[Tuple[str, datetime, float], GpuId] = {}
+    positives: dict[tuple[str, datetime, float], GpuId] = {}
     # Negative candidates, kept only if they are true negatives (leakage guard).
-    negatives: Dict[Tuple[str, datetime, float], GpuId] = {}
+    negatives: dict[tuple[str, datetime, float], GpuId] = {}
 
     for h in horizons_s:
-        positive_refs: List[datetime] = []
+        positive_refs: list[datetime] = []
         for o in onsets:
             positives[(o.gpu.canonical, o.t - timedelta(seconds=h), h)] = o.gpu
             positive_refs.append(o.t - timedelta(seconds=h))
@@ -251,18 +281,20 @@ def build_dataset(
                 if _label(key[0], key[1], key[2], onsets_by_gpu) == 0:
                     negatives[key] = gpu
 
-    candidates: Dict[Tuple[str, datetime, float], GpuId] = {**positives, **negatives}
+    candidates: dict[tuple[str, datetime, float], GpuId] = {**positives, **negatives}
     sample_gpus = sorted({c[0] for c in candidates})
     feature_sources = {m: sources[m] for m in feature_metrics}
     store = TelemetryStore.load(feature_sources, gpus=sample_gpus, alias=alias)
 
-    cache: Dict[Tuple[str, str], Tuple[List[datetime], List[float]]] = {}
-    rows: List[dict] = []
-    for (canonical, t_ref, h), gpu in sorted(candidates.items(),
-                                             key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
+    cache: dict[tuple[str, str], tuple[list[datetime], list[float]]] = {}
+    rows: list[dict] = []
+    for (canonical, t_ref, h), gpu in sorted(
+        candidates.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])
+    ):
         label = _label(canonical, t_ref, h, onsets_by_gpu)
-        row, any_present = _row(gpu, t_ref, h, lookback_s, label, feature_metrics,
-                                store, cache, sample_period_s)
+        row, any_present = _row(
+            gpu, t_ref, h, lookback_s, label, feature_metrics, store, cache, sample_period_s
+        )
         if not any_present:
             continue  # no telemetry in the lookback window -> not a usable point
         rows.append(row)
@@ -286,6 +318,7 @@ def write_dataset(rows: Sequence[dict], out_path: str) -> str:
     if out_path.endswith(".parquet"):
         try:
             import pyarrow  # noqa: F401
+
             df.to_parquet(out_path, index=False)
             return out_path
         except Exception:
