@@ -97,5 +97,3 @@ The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs
 - **Droplet:** `134.199.208.214`, 2 vCPU / 16 GB RAM / 290 GB disk, SFO3, Ubuntu 24.04
 - **Spaces:** dataset bucket `gpu-cluster-trace-datasets.sfo3.digitaloceanspaces.com`
 - **Stack:** FastAPI + Google ADK + Gemini 2.5 Flash + React + Vite + scikit-learn
-
-`scraps/` holds the earlier iteration. `docs/superpowers/` (local only) holds the design spec + plan.
