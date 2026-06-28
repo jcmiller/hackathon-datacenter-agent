@@ -63,6 +63,15 @@ def iter_long_records(
             return
         # Pre-parse column headers once; column 0 is Time.
         col_gpus = [parse_gpu_id(name, alias=alias) for name in header[1:]]
+        # Resolve the kept GPU columns ONCE, intersecting the keep-set against
+        # parsed headers, instead of re-scanning all ~3000 columns (and recomputing
+        # gpu.canonical / the set-membership test) for every data cell. Per-row
+        # work then drops from O(all_cols) to O(kept_cols) — the win when a gpus=
+        # filter keeps only a slice of the fleet. Index is offset by 1 because
+        # column 0 is Time, so kept[i] = (row index, GpuId).
+        kept: list[tuple[int, GpuId]] = [
+            (i + 1, gpu) for i, gpu in enumerate(col_gpus) if keep is None or gpu.canonical in keep
+        ]
 
         for row in reader:
             if not row:
@@ -76,10 +85,13 @@ def iter_long_records(
                 # instead of reading the rest of a ~1 GB file. Lets a consumer
                 # replay a short incident window without a full-file scan.
                 break
-            # row may be shorter than header on ragged lines; zip stops short.
-            for gpu, cell in zip(col_gpus, row[1:], strict=False):
-                if cell == "":
+            width = len(row)
+            for idx, gpu in kept:
+                # Ragged line: a row shorter than the header has no cell for this
+                # column (mirrors the old zip(strict=False) short-stop).
+                if idx >= width:
                     continue
-                if keep is not None and gpu.canonical not in keep:
+                cell = row[idx]
+                if cell == "":
                     continue
                 yield LongRecord(t=t, gpu=gpu, metric=metric, value=float(cell))
