@@ -33,6 +33,7 @@ def test_telemetry_window_aggregates(tmp_path):
     assert w["samples"] == 2                               # rows at 885 and 895
     assert w["max"] == 95
     assert w["min"] == 70
+    assert w["mean"] == 83.75
 
 def test_correlated_failures_within_window(tmp_path):
     inc = load_incidents(_write_trace(tmp_path))
