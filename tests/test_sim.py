@@ -55,6 +55,8 @@ def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
     assert "JOB001" in body          # streamed failure emitted
     assert "JOB002" not in body      # COMPLETED row filtered
     assert "WARM01" not in body      # warm-start failure is history, not streamed
+    # HISTORY = 1 warm-start + 2 streamed rows; guards against double-population
+    assert len(stream.HISTORY) == 3
 
 
 def test_triage_endpoint_wiring(monkeypatch):
