@@ -20,18 +20,16 @@ Two things make this more than "an LLM on a dashboard":
 - **The agent's investigation drives real ML** — model selection + feature engineering gated by held-out ROC-AUC, not vibes.
 - **Every claim is grounded** in a number a tool returned. The agent never asserts a fault cause it can't read (real Xid codes when available; inference from priors otherwise).
 
-## Architecture (`backend/` package)
+## Architecture (`src/gpusitter/` package)
 
-| Module | Responsibility |
+| Subpackage / module | Responsibility |
 |--------|----------------|
-| `loader.py` | AcmeTrace incidents + telemetry windows + correlation |
-| `stream.py` | replay `jobs.csv` over time, warm-start, accrete `HISTORY` |
-| `dataset.py` | history → feature matrix + labels + time-ordered split |
-| `classifier.py` | fit candidate, score ROC-AUC, hold + promote the live model |
-| `tools.py` | agent tools: `get_sensory`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution`, `train_and_validate` |
-| `priors.py` | GPU-failure domain priors injected into the agent |
-| `agent.py` | Google ADK + Gemini 3.5 Flash agent: investigate → improve model → dispose |
-| `sim.py` | FastAPI: SSE incident stream, `/triage`, `/model`; serves the dashboard |
+| `telemetry/` | AcmeTrace load, telemetry windows, q2o telemetry store |
+| `rca/` | correlated-failure analysis (`find_correlated_failures`) |
+| `detection/` | `classifier.py` (fit/score ROC-AUC + promote) · `dataset.py` (featurize + time-ordered split) · `stream.py` (replay `jobs.csv`, warm-start, `HISTORY`) |
+| `agent/` | `agent.py` (ADK + Gemini 3.5 Flash: investigate → improve model → dispose) · `tools.py` (`get_sensory`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution`, `train_and_validate`) · `priors.py` · `memory.py` |
+| `app/` | `sim.py` (FastAPI SSE: `/triage`, `/model`) · `dashboard/` |
+| `domain/` | shared domain models |
 
 **Harness:** Google ADK + Gemini 3.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox; that's a stretch for autonomous actuation).
 
