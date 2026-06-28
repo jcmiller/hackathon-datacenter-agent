@@ -40,6 +40,8 @@ utilization (`pai_sensor_table`) is the closest match to our DCGM telemetry;
 Acme adds LLM-cluster failure/queue dynamics. **See [docs/DATA.md](docs/DATA.md)
 for full schema, sizes, and which trace to use.**
 
+> ⚠️ **AcmeTrace data caveats** (verified): job failures and the 15s telemetry overlap only ~1.5 days; Kalos has **no `NODE_FAIL`** (incident = `FAILED`); timestamps are ISO UTC, not epoch; and **real Xid codes exist** in `XID_ERRORS.csv`. Read the reality-check at the top of [docs/DATA.md](docs/DATA.md) before wiring the pipeline.
+
 ## Key Files
 - simulator.py: Enhanced DCGM GPU metrics + env modes.
 - classifier.py: Lightweight failure classifier.
