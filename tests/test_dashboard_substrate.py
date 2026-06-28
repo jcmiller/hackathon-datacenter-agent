@@ -17,6 +17,7 @@ frames (no LFS / 80 GB trace):
 from __future__ import annotations
 
 import csv
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -310,3 +311,61 @@ def test_build_substrate_off_droplet_fails_loud(tmp_path):
     # "raw data not materialized" state), never a silent empty substrate.
     with pytest.raises((FileNotFoundError, ValueError)):
         ds.build_substrate(repo_dir=str(tmp_path))
+
+
+# --- the COMMITTED real artifact (generated on the droplet) ---------------------
+
+
+def _committed():
+    d = ds.SUBSTRATE_DIR
+
+    def load(name):
+        return json.loads((d / name).read_text())
+
+    return (
+        d,
+        load("meta.json"),
+        load("fleet.json"),
+        load("incidents.json"),
+        load("manifest.json"),
+    )
+
+
+def test_committed_substrate_ships_and_is_real():
+    d, meta, fleet, incidents, manifest = _committed()
+    assert (d / "README.md").exists()
+    assert manifest["kind"] == "real" and manifest["telemetryKind"] == "real"
+    # provenance is populated from the real droplet run.
+    assert manifest["onsetTotal"] > 0
+    assert manifest["generatedFromGitRev"]
+    assert all(i.get("path") for i in manifest["inputs"])
+
+
+def test_committed_substrate_is_edge_detected_not_aug29_cascade():
+    _, meta, fleet, incidents, manifest = _committed()
+    # the debunked latched artifact must appear NOWHERE.
+    assert "2023-08-29" not in meta["cascadeTs"]
+    assert all("2023-08-29" not in i["ts"] for i in incidents)
+    # cascade size is the edge-detected onset count, never the cumulative 882.
+    assert meta["faulted"] == manifest["hero"]["onsets"]
+    assert meta["faulted"] != 882
+
+
+def test_committed_fleet_fault_cells_are_hero_members_only():
+    _, meta, fleet, incidents, manifest = _committed()
+    fault = [c for c in fleet["cells"] if c["status"] == "fault"]
+    # exactly the hero onset members are faults; nobody else is latched-into-fault.
+    assert len(fault) == manifest["hero"]["onsets"]
+    assert fleet["faulted"] == manifest["hero"]["onsets"]
+    assert all(c["xid"] == 0 for c in fleet["cells"] if c["status"] != "fault")
+
+
+def test_committed_substrate_internally_consistent():
+    d, meta, fleet, incidents, manifest = _committed()
+    assert manifest["incidentCount"] == len(incidents)
+    assert sum(1 for i in incidents if i["hero"]) == 1
+    # every incident has a telemetry file with the matching center timestamp.
+    for inc in incidents:
+        rec = json.loads((d / "telemetry" / f"{inc['id']}.json").read_text())
+        assert rec["centerTs"] == inc["ts"]
+        assert rec["gpu"] == f"{inc['gpu']['node']}-{inc['gpu']['idx']}"

@@ -1,0 +1,53 @@
+{
+  "burstCount": 8,
+  "eventWindow": [
+    "2023-08-17T05:40:15+08:00",
+    "2023-08-17T06:20:15+08:00"
+  ],
+  "generatedFromGitRev": "e739892a745dfbd0c22369bdd25bc87dc0436636",
+  "generationCommand": "PYTHONPATH=src python scripts/build_dashboard_substrate.py",
+  "hero": {
+    "center": "2023-08-17T06:00:15+08:00",
+    "codes": {
+      "31": 7,
+      "43": 109
+    },
+    "gpus": 116,
+    "nodes": 74,
+    "onsets": 116
+  },
+  "incidentCount": 9,
+  "inputs": [
+    {
+      "bytesOnDisk": 754379488,
+      "metric": "XID_ERRORS",
+      "path": "data/acme-util/data/utilization/kalos/XID_ERRORS.csv",
+      "workingState": "materialized"
+    },
+    {
+      "bytesOnDisk": 845136147,
+      "metric": "GPU_TEMP",
+      "path": "data/acme-util/data/utilization/kalos/GPU_TEMP.csv",
+      "workingState": "materialized"
+    },
+    {
+      "bytesOnDisk": 929567543,
+      "metric": "POWER_USAGE",
+      "path": "data/acme-util/data/utilization/kalos/POWER_USAGE.csv",
+      "workingState": "materialized"
+    },
+    {
+      "bytesOnDisk": 843403137,
+      "metric": "GPU_UTIL",
+      "path": "data/acme-util/data/utilization/kalos/GPU_UTIL.csv",
+      "workingState": "materialized"
+    }
+  ],
+  "kind": "real",
+  "note": "Derived REAL substrate: incidents are edge-detected Xid onsets (empty-aware), NOT latched cumulative Xid-gauge snapshots. Fleet fault cells are hero-burst onset members only; other GPUs' status is from utilization, never latched Xid. Raw kalos data is unmodified.",
+  "onsetTotal": 852,
+  "samplePeriodSeconds": 15.0,
+  "schema": "gpusitter.dashboard_substrate/v1",
+  "source": "AcmeTrace Kalos (Shanghai AI Lab), Aug 2023 \u2014 edge-detected Xid onsets",
+  "telemetryKind": "real"
+}
