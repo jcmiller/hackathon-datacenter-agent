@@ -28,7 +28,7 @@ incident fires → ADK agent (Gemini) → [ tools ] → disposition + logged SOP
 
 ## Data
 
-[AcmeTrace](https://github.com/InternLM/AcmeTrace) — real LLM-training cluster traces (Kalos, A100s). `trace_kalos.csv` gives `state` (NODE_FAIL/FAILED) + `fail_time` = the incident trigger; util files give power/temp/util. Carries no Xid/ECC cause data — the agent infers cause from priors (honest by design).
+[AcmeTrace](https://github.com/InternLM/AcmeTrace) — real LLM-training cluster traces (Kalos, A100s). `trace_kalos.csv` gives `state` (NODE_FAIL/FAILED) + `fail_time` = the incident trigger; per-metric wide CSVs give power/temp/util at ~15s cadence. `XID_ERRORS.csv` carries **real per-GPU Xid cause codes** (e.g. 43 = channel exception / GPU reset) — the agent grounds cause in real fault codes, with GPU-failure priors (Xid/ECC co-occurrence) filling gaps.
 
 ## Stack
 
