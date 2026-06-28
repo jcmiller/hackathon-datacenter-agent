@@ -2,91 +2,102 @@
 
 **A self-improving reliability agent for data-center GPU fleets.**
 
-Hackathon project — 2026 AI Engineer World's Fair. When a GPU node fails, an agent automates the on-call engineer: it investigates the incident with real sensor tool-calls, then **uses what it found to improve a failure-prediction model** — fitting a candidate, validating it, and promoting it only if it beats the incumbent. Grounded in real AcmeTrace cluster data, not pure simulation.
-
-## The loop
-
-```
-job records stream in (warm-started past ~100 past incidents) → app starts with NO model
-  → incident fires (a FAILED job)
-  → agent investigates via sensory tool-calls (telemetry aggregates, correlated failures, past incidents)
-  → agent picks a model form (logreg/tree/gboost) + feature set based on what it found
-  → train + validate on jobs-streamed-so-far (time-ordered split)
-  → candidate ROC-AUC > incumbent? promote as the live predictor
-  → dashboard updates the model card; resolution logged to memory (SOP)
-```
-
-Two things make this more than "an LLM on a dashboard":
-- **The agent's investigation drives real ML** — model selection + feature engineering gated by held-out ROC-AUC, not vibes.
-- **Every claim is grounded** in a number a tool returned. The agent never asserts a fault cause it can't read (real Xid codes when available; inference from priors otherwise).
+Hackathon project — 2026 AI Engineer World's Fair. Targeting two tracks:
+- **Continual Learning** — agents that improve from real-world use with no user intervention
+- **The Self-Improvement Stack** — infrastructure to continuously evaluate, monitor, and upgrade AI systems
 
 ## Live demo
 
-**http://134.199.208.214:8000** — publicly accessible, running on DigitalOcean (SFO3).
+**http://134.199.208.214:8000** — publicly accessible, running on DigitalOcean SFO3.
 
-Click any incident in the feed → the agent triages it live with real Gemini tool calls streaming
-in real time. Each run writes a new entry to the SOP; subsequent similar incidents surface past
-cases with semantic similarity scores.
+Click any incident in the feed → Gemini 2.5 Flash triages it live with real tool calls streaming in real time. Every completed triage writes to the SOP and retrains the predictor — the system gets smarter each run.
+
+## The self-improvement loop
+
+```
+incident fires
+  → agent calls get_telemetry + check_degradation_trend + find_correlated_failures
+  → agent calls search_past_incidents (semantic similarity over all prior SOP entries)
+      ↳ references similar past cases by name; notes if pattern was seen before
+  → agent decides disposition + calls record_resolution with:
+      - full summary + resolution text (embedded via gemini-embedding-001 for future search)
+      - numeric telemetry metrics: power_spike_ratio, temp_rise_C, correlated_count
+  → agent calls train_and_validate
+      ↳ fits logreg on all SOP entries that have metrics
+      ↳ promotes to v(N+1) if val ROC-AUC beats incumbent (or no incumbent yet)
+      ↳ model card updates in the UI: version · model_type · AUC · n_samples
+  → outcome auto-saved to memory (no user prompt)
+      ↳ SOP entry re-embedded with outcome context for richer future search
+```
+
+**What improves with each incident:**
+1. **Semantic recall** — the SOP grows; future agents find similar cases by meaning, not keyword
+2. **Degradation fingerprints** — summaries explicitly record pre-failure power spike ratios and temp rises; future search surfaces these signals for earlier prediction
+3. **Disposition classifier** — trains from incident 1; version increments whenever val AUC improves; AUC shown as `—` until enough varied cases accumulate for a holdout
+4. **Outcome-enriched embeddings** — auto-confirmed outcomes re-embed the SOP entry so future semantic search finds confirmed hardware faults vs false alarms
 
 ## Architecture (`backend/` package)
 
 | Module | Responsibility |
 |--------|----------------|
 | `loader.py` | AcmeTrace incidents + telemetry windows + correlation |
-| `memory.py` | SOP read/write + `gemini-embedding-001` semantic search (cosine similarity over `data/sop_vectors.json`) |
-| `tools.py` | `get_telemetry`, `check_degradation_trend`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution` |
+| `memory.py` | SOP read/write + `gemini-embedding-001` semantic search; lazy vector index in `data/sop_vectors.json`; cosine similarity with 0.4 threshold |
+| `dataset.py` | `build_xy_from_sop()` — extracts `[power_spike_ratio, temp_rise_C, correlated_count]` feature matrix from SOP entries for classifier training |
+| `classifier.py` | `fit_candidate` / `maybe_promote` / `save_state` — in-memory incumbent + persisted model card at `data/model_state.json` |
+| `tools.py` | `get_telemetry`, `check_degradation_trend`, `find_correlated_failures`, `search_past_incidents`, `page_technician`, `record_resolution` (stores metrics), `train_and_validate` |
 | `priors.py` | GPU-failure domain priors injected into the agent system prompt |
-| `agent.py` | Google ADK + Gemini 2.5 Flash: 6-step ReAct triage loop, yields SSE events |
-| `sim.py` | FastAPI: SSE incident stream (`/api/incidents`), streaming triage (`/api/triage`), serves compiled React dashboard |
+| `agent.py` | Google ADK + Gemini 2.5 Flash: 7-step ReAct triage loop, yields SSE events |
+| `sim.py` | FastAPI: `/api/incidents` (SSE stream), `/api/triage` (streaming agent), `/api/model` (model card), `/api/feedback` (outcome recording); serves compiled React dashboard |
 
-**Recursive self-improvement:** each `record_resolution` call embeds the new SOP entry with `gemini-embedding-001`; `search_past_incidents` does cosine similarity over all prior entries so the agent recognizes failure patterns it has seen before and notes pre-failure degradation signals for earlier prediction next time.
+## API
 
-**Harness:** Google ADK + Gemini 2.5 Flash — a thin, embedded tool-calling loop we control (not the hosted Managed-Agents sandbox).
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace |
+| `/api/triage` | POST SSE | Stream Gemini agent events for one incident |
+| `/api/model` | GET | Current predictor: version, model_type, val_auc, n_samples |
+| `/api/feedback` | POST | Record outcome `{incident_id, outcome}` → re-embeds SOP entry |
 
-## Quick start (local, no big data needed)
+## Self-improvement observability
+
+After each triage the UI shows:
+- **Model card** (top of triage panel): `predictor · logreg · v2 · AUC 0.847 · 9 samples`
+- **SOP written** badge when `record_resolution` fires
+- **`✎ saved to memory`** in the disposition header when the run completes
+
+## Quick start (local)
 
 ```bash
 pip install -r requirements.txt
-python scripts/make_mock_jobs.py        # writes a small data/jobs.csv (synthetic, schema-correct)
-export GOOGLE_API_KEY=...               # needed only for the live agent /triage
+export GOOGLE_API_KEY=...
 uvicorn backend.sim:app --reload        # → http://localhost:8000
-pytest -q                               # offline test suite
+pytest -q                               # offline test suite (no API key needed)
 ```
 
-The mock lets you run the full stream → incident → train/validate → promote loop locally without the 80 GB dataset.
-
-## Data
-
-The 80 GB AcmeTrace telemetry **never runs in the app**. A one-time offline step
-(`scripts/precompute_features.py`, run on the box where the data lives) turns it into a
-small `data/jobs.csv` — one row per job: metadata + telemetry aggregates + label. The sim
-replays that small file. See **[docs/DATA.md](docs/DATA.md)** and **[docs/data-findings.md](docs/data-findings.md)**.
-
-```bash
-scripts/download_datasets.sh        # PAI 2020 + Acme (default)
-scripts/download_datasets.sh all    # + Philly (best-effort) + extra Alibaba traces
-scripts/download_datasets.sh --list # show targets
-```
-
-> ⚠️ **AcmeTrace reality check** (verified, read before wiring real data): job failures and
-> the 15 s telemetry overlap only ~1.5 days (~113 of 13,836 FAILED jobs have telemetry);
-> Kalos has **no `NODE_FAIL`** — incident = `FAILED` + non-null `fail_time`; timestamps are
-> **ISO UTC strings**, not epoch; `util_pkl/*.pkl` are CDF distributions, **not** time series
-> (real telemetry is `acme-util/.../kalos/*.csv`); and **real Xid codes exist** in
-> `XID_ERRORS.csv`. Full detail at the top of [docs/DATA.md](docs/DATA.md).
-
-## DigitalOcean (data + compute)
-
-- **Spaces:** dataset bucket `https://gpu-cluster-trace-datasets.sfo3.digitaloceanspaces.com/`.
-- **Droplet:** runs services + telemetry processing — `134.199.208.214`, 4 GB / 2 vCPU / 120 GB, SFO3, Ubuntu 24.04. A 16 GB swap file was added to survive Git-LFS OOM when fetching `acme-util`; the ~80 GB lives in the LFS cache and is read in place via `scripts/lfs_helper.py` (no checkout). See [docs/TEAM_GUIDE.md](docs/TEAM_GUIDE.md).
+No big data needed locally — the app serves fixture incidents from `backend/dashboard/fixtures/`.
 
 ## Status
 
-- ✅ Reactive RCA agent — real Gemini tool calls, live SSE streaming, animated dashboard
-- ✅ Semantic memory — `gemini-embedding-001` embeddings, cosine similarity, lazy vector index
-- ✅ Pre-failure degradation detection — power spike ratio + temp rise over 4-hour lookback
-- ✅ Self-improving SOP — every resolution embeds and becomes searchable for future incidents
-- 🚧 ML predictor loop (`dataset`, `classifier`, `train_and_validate`) — in progress
-- ⏭️ Stretch: Xid-event-driven incidents, Managed-Agents actuation, MCP tool exposure
+- ✅ Real Gemini tool calls — no mocks, all 7 tools fire in production
+- ✅ Live SSE streaming — animated phase indicator, tool spinner, elapsed timer
+- ✅ Semantic SOP memory — `gemini-embedding-001`, cosine similarity, lazy vector index, 0.8+ similarity on known patterns
+- ✅ Pre-failure degradation detection — `check_degradation_trend` looks 4 h before failure; power spike ratio >1.5 or temp rise >10 °C flags `gradual_degradation_signal`
+- ✅ Disposition classifier — trains from incident 1; promotes on AUC improvement; model card in UI
+- ✅ Outcome feedback — auto-saves after every triage; re-embeds SOP entry with outcome context
+- ✅ `/api/model` + `/api/feedback` REST endpoints
+- 🚧 Xid-event-driven real-time incident ingestion (currently replays trace CSV)
+- ⏭️ Stretch: Managed-Agents actuation, MCP tool exposure, model routing by incident type
 
-`scraps/` holds the earlier iteration. `docs/superpowers/` (local only) holds the design spec + implementation plan.
+## Data
+
+The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs directly at query time (`data/acme-util/data/utilization/kalos/*.csv`). See **[docs/DATA.md](docs/DATA.md)** for schema details and the AcmeTrace reality check.
+
+> ⚠️ **AcmeTrace reality check**: job failures and 15 s telemetry overlap only ~1.5 days; Kalos has no `NODE_FAIL` — incident = `FAILED` + non-null `fail_time`; timestamps are ISO UTC strings; `util_pkl/*.pkl` are CDF distributions not time series; real Xid codes in `XID_ERRORS.csv`.
+
+## Infrastructure
+
+- **Droplet:** `134.199.208.214`, 2 vCPU / 16 GB RAM / 290 GB disk, SFO3, Ubuntu 24.04
+- **Spaces:** dataset bucket `gpu-cluster-trace-datasets.sfo3.digitaloceanspaces.com`
+- **Stack:** FastAPI + Google ADK + Gemini 2.5 Flash + React + Vite + scikit-learn
+
+`scraps/` holds the earlier iteration. `docs/superpowers/` (local only) holds the design spec + plan.
