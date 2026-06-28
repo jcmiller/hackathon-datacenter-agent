@@ -618,9 +618,10 @@
   padding-left: 8px;
 }
 .cu-reasoning .cu-log-text {
-  color: var(--fg-faint);
+  color: var(--fg);
   font-size: 11px;
   white-space: pre-wrap;
+  line-height: 1.5;
 }
 .cu-action {
   display: flex;
@@ -633,11 +634,20 @@
   padding: 5px 8px;
   border: 1px solid rgba(255,255,255,0.06);
 }
+.cu-action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .cu-action-icon { color: #f59e0b; }
 .cu-action-name { color: #93c5fd; font-weight: 700; font-family: monospace; }
 .cu-action-coord { color: var(--fg-faint); font-family: monospace; font-size: 10px; }
 .cu-action-text { color: #86efac; font-style: italic; }
 .cu-action-result { color: var(--fg-faint); font-size: 10px; margin-left: auto; }
+.cu-action-intent {
+  margin-top: 4px;
+  color: #fde68a;
+  font-style: italic;
+  font-size: 11px;
+  border-left: 2px solid #f59e0b;
+  padding-left: 6px;
+}
 .cu-done {
   color: #6ee7b7;
   font-weight: 600;

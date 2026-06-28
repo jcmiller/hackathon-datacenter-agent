@@ -22,13 +22,17 @@ MAX_TURNS = 5
 VIEWPORT = {"width": 1280, "height": 800}
 
 DEFAULT_TASK = (
-    "You are an expert GPU fleet reliability engineer. "
-    "This is the GPUSitter monitoring dashboard. "
-    "1. Identify the most critical GPU incident shown in the incident feed on the left. "
-    "2. Click on it to select it. "
-    "3. Wait for the AI triage panel on the right to show the agent reasoning. "
-    "4. Report what disposition the agent reached and why. "
-    "Be precise — click exactly on the incident row."
+    "You are an expert GPU fleet reliability engineer autonomous agent. "
+    "This is the GPUSitter GPU fleet monitoring dashboard. "
+    "Step 1 — READ THE SCREEN: List every incident card you can see in the feed on the left. "
+    "For each one, state its ID, Xid code, Xid label, severity badge colour, and correlated GPU count. "
+    "Read this directly from the text visible on screen — do not guess. "
+    "Step 2 — PRIORITISE: Explain which incident is the most critical and why "
+    "(consider severity, Xid code, and correlated count). "
+    "Step 3 — ACT: Click exactly on that incident row to select it. "
+    "Step 4 — REPORT: Once the triage panel on the right finishes, read and report "
+    "the disposition label and the key reasoning shown. "
+    "Be explicit at every step about what text you are reading from the screen."
 )
 
 _COMPUTER_USE_TOOL = types.Tool(

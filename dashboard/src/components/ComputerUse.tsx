@@ -206,20 +206,24 @@ function LogEntry({ ev }: { ev: CUEvent }) {
     const coord =
       (ev.args.coordinate as number[] | undefined) ||
       (ev.args.x !== undefined ? [ev.args.x, ev.args.y] : null);
+    const intent = ev.args.intent as string | undefined;
     return (
       <div className="cu-log-entry cu-action">
-        <span className="cu-log-turn">T{ev.turn}</span>
-        <span className="cu-action-icon">⚡</span>
-        <span className="cu-action-name">{ev.name}</span>
-        {coord && (
-          <span className="cu-action-coord">
-            ({Math.round(Number(coord[0]))}, {Math.round(Number(coord[1]))})
-          </span>
-        )}
-        {ev.args.text != null && (
-          <span className="cu-action-text">"{String(ev.args.text)}"</span>
-        )}
-        <span className="cu-action-result">{ev.result}</span>
+        <div className="cu-action-row">
+          <span className="cu-log-turn">T{ev.turn}</span>
+          <span className="cu-action-icon">⚡</span>
+          <span className="cu-action-name">{ev.name}</span>
+          {coord && (
+            <span className="cu-action-coord">
+              ({Math.round(Number(coord[0]))}, {Math.round(Number(coord[1]))})
+            </span>
+          )}
+          {ev.args.text != null && (
+            <span className="cu-action-text">"{String(ev.args.text)}"</span>
+          )}
+          <span className="cu-action-result">{ev.result}</span>
+        </div>
+        {intent && <div className="cu-action-intent">"{intent}"</div>}
       </div>
     );
   }
