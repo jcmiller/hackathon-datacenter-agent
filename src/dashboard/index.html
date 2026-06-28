@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPUSitter · Live Telemetry Control & Triage</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0d19;
+      --card-bg: rgba(25, 28, 48, 0.45);
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --primary: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.15);
+      --healthy: #10b981;
+      --healthy-glow: rgba(16, 185, 129, 0.15);
+      --faulty: #ef4444;
+      --faulty-glow: rgba(239, 68, 68, 0.15);
+      --warning: #f59e0b;
+      --warning-glow: rgba(245, 158, 11, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      padding: 2rem;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.03) 0%, transparent 40%);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+
+    .logo-container h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      background: linear-gradient(135deg, #a5b4fc 0%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-container p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.2rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.4rem 0.8rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: var(--healthy-glow);
+      color: var(--healthy);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 3fr 1.2fr;
+      gap: 2rem;
+    }
+
+    .nodes-section {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .node-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .node-card:hover {
+      border-color: rgba(99, 102, 241, 0.25);
+      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.05);
+    }
+
+    .node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.2rem;
+    }
+
+    .node-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+
+    .gpus-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .gpu-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      position: relative;
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+
+    .gpu-card:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .gpu-card.healthy {
+      border-left: 3px solid var(--healthy);
+    }
+
+    .gpu-card.faulty {
+      border-left: 3px solid var(--faulty);
+      background: var(--faulty-glow);
+    }
+
+    .gpu-card.warning {
+      border-left: 3px solid var(--warning);
+      background: var(--warning-glow);
+    }
+
+    .gpu-id {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .metric-value {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .controls-panel {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      align-self: start;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .control-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    select, button {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      padding: 0.7rem;
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    select:focus {
+      border-color: var(--primary);
+    }
+
+    option {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      font-weight: 600;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    button.primary:hover {
+      background: #4f46e5;
+    }
+
+    button.reset {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    button.reset:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .console {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      height: 250px;
+      overflow-y: auto;
+      color: #38bdf8;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .console-line {
+      line-height: 1.4;
+    }
+    
+    .console-line.info { color: #38bdf8; }
+    .console-line.warn { color: var(--warning); }
+    .console-line.error { color: var(--faulty); }
+    .console-line.success { color: var(--healthy); }
+
+    .triage-card {
+      background: rgba(99, 102, 241, 0.05);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 12px;
+      padding: 1rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .triage-card h3 {
+      font-size: 0.95rem;
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <h1>GPUSitter</h1>
+      <p>Simulating Live GPU Telemetry Streams & AI On-Call Triage</p>
+    </div>
+    <div class="badge" id="stream-status">Telemetry Stream Active</div>
+  </header>
+
+  <div class="main-grid">
+    <div class="nodes-section" id="nodes-container">
+      <!-- Generated dynamically -->
+    </div>
+
+    <div class="controls-panel">
+      <div>
+        <h2 class="section-title">Failure Injector</h2>
+        <div class="control-group" style="margin-top: 1rem;">
+          <div class="control-label">Target Server Node</div>
+          <select id="select-node">
+            <option value="172.31.5.201">172.31.5.201</option>
+            <option value="172.31.5.202">172.31.5.202</option>
+            <option value="172.31.5.233">172.31.5.233</option>
+            <option value="172.31.0.32">172.31.0.32</option>
+          </select>
+        </div>
+        <div class="control-group" style="margin-top: 0.8rem;">
+          <div class="control-label">GPU Index</div>
+          <select id="select-gpu">
+            <option value="0">GPU 0</option>
+            <option value="1">GPU 1</option>
+            <option value="2">GPU 2 (ECC Test Subject)</option>
+            <option value="3">GPU 3</option>
+            <option value="4">GPU 4</option>
+            <option value="5">GPU 5</option>
+            <option value="6">GPU 6</option>
+            <option value="7">GPU 7</option>
+          </select>
+        </div>
+        <div class="control-group" style="margin-top: 0.8rem;">
+          <div class="control-label">Error Sequence</div>
+          <select id="select-error">
+            <option value="ecc_crash">ECC Memory Crash (Xid 31 after spike)</option>
+            <option value="overheat">Thermal Overheating (Xid 43 thermal limit)</option>
+            <option value="init_fail">Instant Init Failure (Xid 43 on job start)</option>
+          </select>
+        </div>
+        <button class="primary" id="btn-inject" style="margin-top: 1.2rem;">Inject Failure Sequence</button>
+        <button class="reset" id="btn-reset" style="margin-top: 0.5rem;">Reset Target to Healthy</button>
+      </div>
+
+      <div>
+        <h2 class="section-title">GPUSitter RCA Engine</h2>
+        <div class="triage-card" id="triage-card">
+          <h3>Incident Diagnostics</h3>
+          <p><strong>RCA:</strong> <span id="triage-rca">-</span></p>
+          <p><strong>Early Warn Rule:</strong> <span id="triage-rule" style="color: #f59e0b;">-</span></p>
+          <p><strong>Action:</strong> <span id="triage-action" style="font-weight: 600;">-</span></p>
+        </div>
+        <div class="control-group" style="margin-top: 0.8rem;">
+          <div class="control-label">Active Triage Console</div>
+          <div class="console" id="console">
+            <div class="console-line success">GPUSitter initialized. Listening for telemetry events...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const container = document.getElementById('nodes-container');
+    const consoleDiv = document.getElementById('console');
+    const triageCard = document.getElementById('triage-card');
+    
+    // Create DOM structure for servers
+    const nodes = ["172.31.5.201", "172.31.5.202", "172.31.5.233", "172.31.0.32"];
+    const cards = {};
+
+    nodes.forEach(node => {
+      const nodeCard = document.createElement('div');
+      nodeCard.className = 'node-card';
+      
+      const header = document.createElement('div');
+      header.className = 'node-header';
+      header.innerHTML = `<div class="node-title">Server Node ${node}</div>`;
+      
+      const grid = document.createElement('div');
+      grid.className = 'gpus-grid';
+      
+      for (let i = 0; i < 8; i++) {
+        const gpuId = `${node}-${i}`;
+        const gpuCard = document.createElement('div');
+        gpuCard.className = 'gpu-card healthy';
+        gpuCard.id = `gpu-${gpuId}`;
+        gpuCard.innerHTML = `
+          <div class="gpu-id">
+            <span>GPU ${i}</span>
+            <span class="status-label" style="font-size: 0.75rem; color: var(--healthy);">HEALTHY</span>
+          </div>
+          <div class="metrics">
+            <span>Utilization</span><span class="metric-value" id="val-util-${gpuId}">0.0%</span>
+            <span>Power</span><span class="metric-value" id="val-power-${gpuId}">64.0W</span>
+            <span>Core Temp</span><span class="metric-value" id="val-temp-${gpuId}">32.0°C</span>
+            <span>Mem Temp</span><span class="metric-value" id="val-mtemp-${gpuId}">47.0°C</span>
+            <span>VRAM Used</span><span class="metric-value" id="val-vused-${gpuId}">3MB</span>
+            <span>Xid State</span><span class="metric-value" id="val-xid-${gpuId}">-</span>
+          </div>
+        `;
+        grid.appendChild(gpuCard);
+        cards[gpuId] = gpuCard;
+      }
+      
+      nodeCard.appendChild(header);
+      nodeCard.appendChild(grid);
+      container.appendChild(nodeCard);
+    });
+
+    function logConsole(text, type = 'info') {
+      const line = document.createElement('div');
+      line.className = `console-line ${type}`;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      consoleDiv.appendChild(line);
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+
+    // Connect to SSE telemetry stream
+    const eventSource = new EventSource('/telemetry/stream');
+    
+    eventSource.onopen = () => {
+      document.getElementById('stream-status').textContent = 'Telemetry Stream Active';
+      document.getElementById('stream-status').style.background = 'var(--healthy-glow)';
+      document.getElementById('stream-status').style.color = 'var(--healthy)';
+    };
+
+    eventSource.onerror = () => {
+      document.getElementById('stream-status').textContent = 'Stream Disconnected';
+      document.getElementById('stream-status').style.background = 'var(--faulty-glow)';
+      document.getElementById('stream-status').style.color = 'var(--faulty)';
+    };
+
+    const reportedFails = new Set();
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      
+      Object.keys(data).forEach(gpuId => {
+        const gpu = data[gpuId];
+        const card = cards[gpuId];
+        
+        // Update DOM elements
+        document.getElementById(`val-util-${gpuId}`).textContent = `${gpu.util}%`;
+        document.getElementById(`val-power-${gpuId}`).textContent = `${gpu.power}W`;
+        document.getElementById(`val-temp-${gpuId}`).textContent = `${gpu.temp}°C`;
+        document.getElementById(`val-mtemp-${gpuId}`).textContent = `${gpu.mem_temp}°C`;
+        document.getElementById(`val-vused-${gpuId}`).textContent = `${Math.round(gpu.fb_used)} MB`;
+        
+        const xidLabel = document.getElementById(`val-xid-${gpuId}`);
+        xidLabel.textContent = gpu.xid > 0 ? `Xid ${gpu.xid}` : '-';
+        xidLabel.style.color = gpu.xid > 0 ? 'var(--faulty)' : 'var(--text)';
+        
+        const statusLabel = card.querySelector('.status-label');
+        
+        // Class updates
+        card.className = 'gpu-card';
+        if (gpu.status === 'faulty') {
+          card.classList.add('faulty');
+          statusLabel.textContent = `FAULTY (Xid ${gpu.xid})`;
+          statusLabel.style.color = 'var(--faulty)';
+          
+          // Trigger triage event automatically on the frontend (acting as the monitoring sensor loop)
+          if (!reportedFails.has(gpuId)) {
+            reportedFails.add(gpuId);
+            triggerTriage(gpu.node, gpu.index, gpu.xid);
+          }
+        } else if (gpu.active_sequence) {
+          card.classList.add('warning');
+          statusLabel.textContent = `WARNING (${gpu.active_sequence})`;
+          statusLabel.style.color = 'var(--warning)';
+        } else {
+          card.classList.add('healthy');
+          statusLabel.textContent = 'HEALTHY';
+          statusLabel.style.color = 'var(--healthy)';
+          reportedFails.delete(gpuId);
+        }
+      });
+    };
+
+    async function triggerTriage(node, gpuIndex, xid) {
+      const gpuId = `${node}-${gpuIndex}`;
+      logConsole(`ANOMALY: GPU ${gpuId} reported Xid ${xid}. Initiating automatic triage...`, 'warn');
+      
+      try {
+        const res = await fetch('/api/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            incident_id: 'INC-' + Math.floor(Math.random() * 100000),
+            node: node,
+            gpu_index: gpuIndex,
+            trigger_xid: xid,
+            trigger_time: new Date().toISOString()
+          })
+        });
+        
+        const rca = await res.json();
+        
+        // Update triage panel
+        triageCard.style.display = 'flex';
+        document.getElementById('triage-rca').textContent = rca.rca;
+        document.getElementById('triage-rule').textContent = rca.early_warning_rule;
+        document.getElementById('triage-action').textContent = rca.disposition;
+        
+        const actionSpan = document.getElementById('triage-action');
+        actionSpan.style.color = rca.disposition === 'REPLACE_GPU' ? 'var(--faulty)' : 'var(--warning)';
+        
+        logConsole(`TRIAGE SUCCESS: Diagnosis: "${rca.rca}"`, 'success');
+        logConsole(`DISPOSITION: Executing node action: "${rca.disposition}"`, 'success');
+      } catch (err) {
+        logConsole(`Triage failed: ${err}`, 'error');
+      }
+    }
+
+    // Buttons
+    document.getElementById('btn-inject').onclick = async () => {
+      const node = document.getElementById('select-node').value;
+      const gpuIndex = parseInt(document.getElementById('select-gpu').value);
+      const errorType = document.getElementById('select-error').value;
+      
+      logConsole(`Command sent: Inject ${errorType} on GPU ${node}-${gpuIndex}...`);
+      
+      const res = await fetch('/api/inject_failure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node, gpu_index: gpuIndex, error_type: errorType })
+      });
+      const data = await res.json();
+      if (data.success) {
+        logConsole(`Error sequence successfully initiated on GPU ${node}-${gpuIndex}.`);
+      } else {
+        logConsole(`Error: ${data.error}`, 'error');
+      }
+    };
+
+    document.getElementById('btn-reset').onclick = async () => {
+      const node = document.getElementById('select-node').value;
+      const gpuIndex = parseInt(document.getElementById('select-gpu').value);
+      
+      logConsole(`Command sent: Reset GPU ${node}-${gpuIndex} to healthy...`);
+      
+      const res = await fetch('/api/inject_failure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node, gpu_index: gpuIndex, error_type: 'reset' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        logConsole(`GPU ${node}-${gpuIndex} successfully reset to healthy.`);
+        triageCard.style.display = 'none';
+      }
+    };
+  </script>
+</body>
+</html>
