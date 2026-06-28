@@ -1,53 +1,77 @@
-# GPU On-Call RCA Agent
+# GPUSitter
 
-An AI agent that **automates the GPU-fleet on-call engineer**. When a node fails, it does the triage a human would — pulls telemetry, finds correlated failures, matches past incidents, decides a fix, pages a tech if needed, and logs the resolution. Grounded in real failures, not synthetic data.
+**Self-Improving Multi-Stage Agentic System for Data Center GPU Resilience**
 
-## Why it's not "an LLM on a dashboard"
+## Hackathon Project for 2026 AI Engineer World's Fair
 
-A threshold alert says *what* broke. The agent does the work a human on-call does *after* the alert:
+Built with Gemini 3.5 / Antigravity for the **Self-Improvement Stack** theme. Leverages DCGM-inspired GPU telemetry.
 
-- **Correlate** — pulls telemetry around the crash, finds the common thread across co-failed nodes (same window, same job type) → root, not symptom.
-- **Remember** — retrieves the matching past incident + resolution. Gets smarter each run.
-- **Reason in-domain** — reads symptoms through GPU-failure priors (Xid/ECC co-occurrence) to name a likely cause class.
-- **Decide, grounded** — every claim cites a number a tool returned. Picks a disposition: escalate / page technician / restart.
+## Recent Improvements
+- Enhanced simulator with richer DCGM metrics (memory, NVLink proxy, fan effort, throttling reasons, trend buffering).
+- Stronger self-improver with persistent edit skeletons and validation replay.
+- Monitoring loop with history buffering for better trend detection.
+- Expanded documentation with partner leverage plan.
 
-Reactive only. No prediction.
+## Multi-Stage Architecture
+1. **Monitoring Loop** - Continuous telemetry ingestion.
+2. **Classifier** (small Gemini) - Fast failure detection & typing.
+3. **Analyzer** (Antigravity) - Deep RCA & remediation.
+4. **Self-Improver** - Reflection + autonomous skill evolution.
 
-## Architecture
+See ARCHITECTURE.md for detailed flow and diagrams.
 
-```
-incident fires → ADK agent (Gemini) → [ tools ] → disposition + logged SOP
-                      ▲ priors (SKILL.md)
-```
+## Quick Start
+1. `export GEMINI_API_KEY=...`
+2. `pip install -r requirements.txt`
+3. `python demo/main_loop_demo.py` (basic loop + classifier)
+4. Extend with Antigravity for full analyzer/self-improver.
 
-- **Brain** — Google ADK + Gemini, thin tool-calling loop. Embedded, controllable, streamed to the dashboard.
-- **Tools** — `get_telemetry` · `find_correlated_failures` · `search_past_incidents` · `page_technician` · `record_resolution`.
-- **Sensor sim** — FastAPI backend replays real telemetry and fires incidents, mocking the real DCGM / IPMI / Prometheus surface (real field names: `DCGM_FI_DEV_POWER_USAGE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_GPU_UTIL`).
-- **Memory** — JSON SOP store of past incident → resolution.
-- **Dashboard** — incident feed lights up → live agent-reasoning tab.
-
-## Data
-
-[AcmeTrace](https://github.com/InternLM/AcmeTrace) — real LLM-training cluster traces (Kalos, A100s). `trace_kalos.csv` gives `state` (NODE_FAIL/FAILED) + `fail_time` = the incident trigger; util files give power/temp/util. Carries no Xid/ECC cause data — the agent infers cause from priors (honest by design).
-
-## Stack
-
-Python · Google ADK + Gemini 2.5 Flash · FastAPI (SSE) · pandas · pytest.
-
-## Run
+## Real-World Data
+Ground the simulator/classifier in production GPU-cluster telemetry:
 
 ```bash
-pip install -r requirements.txt
-export GOOGLE_API_KEY=...
-uvicorn backend.sim:app --reload   # → http://localhost:8000
-pytest -v
+scripts/download_datasets.sh        # PAI 2020 + Acme (default)
+scripts/download_datasets.sh all    # + Philly (best-effort) + extra Alibaba traces
+scripts/download_datasets.sh --list # show targets
 ```
 
-## Stretch
+Datasets land in `data/` (gitignored, ~4 GB). PAI's per-worker GPU/mem
+utilization (`pai_sensor_table`) is the closest match to our DCGM telemetry;
+Acme adds LLM-cluster failure/queue dynamics. **See [docs/DATA.md](docs/DATA.md)
+for full schema, sizes, and which trace to use.**
 
-- **Managed Agents spin-off** — for autonomous actuation/coding (write remediation, draft ticket/PR) in a Google sandbox, where it actually fits. Same `SKILL.md` priors.
-- MCP exposure of the tools · DSPy-tuned disposition · embedding-based incident memory.
+> ⚠️ **AcmeTrace data caveats** (verified): job failures and the 15s telemetry overlap only ~1.5 days; Kalos has **no `NODE_FAIL`** (incident = `FAILED`); timestamps are ISO UTC, not epoch; and **real Xid codes exist** in `XID_ERRORS.csv`. Read the reality-check at the top of [docs/DATA.md](docs/DATA.md) before wiring the pipeline.
 
-## Build plan
+## Key Files
+- simulator.py: Enhanced DCGM GPU metrics + env modes.
+- classifier.py: Lightweight failure classifier.
+- main_loop.py: Orchestration skeleton.
+- self_improver.py: Reflection skeleton.
+- scripts/download_datasets.sh: Fetch real GPU-cluster traces into `data/`.
+- docs/DATA.md: What each dataset contains and how to load it.
+- ARCHITECTURE.md, PLAN.md, SKILL.md, AGENTS.md.
 
-`scraps/` — prior iteration (archived). Full task-by-task plan: see the implementation plan in `docs/`.
+## Leveraging Hackathon Partner Resources
+- **Modular (MAX + Mojo)**: Use MAX guides and Modular Agent Skills for optimized simulator components or Mojo-based metric processing/remediation. Great for heterogeneous compute performance.
+- **Antigravity (Google DeepMind)**: Core for persistent self-edits via env_id sandbox.
+- **Gemini/Gemma**: Enhance classifier with Gemma (local), Gemini Live for voice alerts.
+- **LiveKit**: Add voice/video interfaces for ops alerts/commands.
+- **Digital Ocean**:
+  - **Spaces (Storage)**: A dedicated S3-compatible Spaces bucket (`https://gpu-cluster-trace-datasets.sfo3.digitaloceanspaces.com/`) is available to host the datasets.
+  - **Droplet (Compute)**: Runs the GPUSitter continuous monitoring loop, classifier, and self-improver agent:
+    - Name: `ubuntu-s-2vcpu-4gb-120gb-intel-sfo3-aie-hack`
+    - Spec: 4 GB / 2 Intel vCPUs / 120 GB / SFO3 - Ubuntu 24.04 (LTS) x64 (IP: `134.199.208.214`).
+    - Note: To resolve memory constraints and prevent Git LFS OOM termination when downloading `acme-util`, a **16 GB swap file** was created and enabled on this VM.
+  - **Orchestration**: Managed and automated using **Antigravity / Gemini 3.5 Flash** to coordinate interactions with DigitalOcean infrastructure.
+- **MongoDB Atlas**: Persistent storage for telemetry history and improvement logs.
+- **MiniMax**: Multimodal extensions (e.g., vision for physical monitoring).
+
+See PLAN.md for integration priorities.
+
+## Demo Highlights for Judges
+- Live multi-stage pipeline with realistic failures.
+- Visible self-improvement (before/after on novel GPU failures).
+- Partner integrations roadmap.
+- High technicality + originality in critical infrastructure domain.
+
+Public repo for submission. Strong foundation after improvements.

@@ -1,7 +1,52 @@
 # Datasets
 
-Real-world GPU-cluster traces that ground EvoSentinel DC's telemetry, failure
+Real-world GPU-cluster traces that ground GPUSitter's telemetry, failure
 classification, and remediation in production data rather than pure simulation.
+
+---
+
+## ⚠️ AcmeTrace reality check — READ BEFORE WIRING THE PIPELINE (verified 2026-06-27)
+
+Hands-on inspection of the downloaded data contradicts several common assumptions
+about AcmeTrace. **These are the ground truth:**
+
+1. **Job trace and fine-grained telemetry barely overlap in time (~1.5 days).**
+   AcmeTrace is two loosely-coupled logs at different granularities:
+   - `trace_kalos.csv` = the **scheduler log over the full 6 months** (job rows,
+     incl. `fail_time`). FAILED jobs span **May 17 → Aug 16 2023 (UTC)**.
+   - `acme-util/data/utilization/kalos/*.csv` = **15-second DCGM telemetry**, only
+     released as a **~2-week profiling snapshot: Aug 15 → Aug 31 2023 (+08:00)**.
+   Storing 15s × 2,344 GPUs × ~11 metrics for 6 months would be tens of TB, so
+   only the snapshot was published. **Result: only ~113 of 13,836 FAILED jobs
+   fall inside the telemetry window.** You generally *cannot* time-join an
+   arbitrary failure to its telemetry. Timezones also differ (+08 vs +00) and
+   must be normalized. This is a property of the public release, not a bad download.
+
+2. **There is NO `NODE_FAIL` state in Kalos.** States are `COMPLETED` (47,311),
+   `FAILED` (13,836), `CANCELLED` (1,263), `RUNNING` (3). A filter of
+   `{NODE_FAIL, FAILED}` only ever matches `FAILED`. Use `FAILED` + non-null `fail_time`.
+
+3. **Timestamps are ISO strings (UTC), not Unix epoch.** e.g.
+   `2023-05-17 11:00:58+00:00`. Parse with `pd.to_datetime(...)`, not as int seconds.
+
+4. **Real Xid codes DO exist** — `acme-util/data/utilization/kalos/XID_ERRORS.csv`
+   has per-GPU, per-timestamp Xid codes (43 = GPU stopped processing, 94 = contained
+   ECC, 45, 31 = memory page fault). The classifier/agent can read *actual* fault codes
+   rather than inferring cause. (It's a DCGM gauge holding the *last* Xid, so a faulted
+   GPU repeats its code every sample until cleared — events ≠ raw nonzero-cell count.)
+
+5. **The `acme/data/utilization/util_pkl/*.pkl` files are NOT time series** — they are
+   precomputed **CDF distributions** (lists of 1000-point arrays for the paper's plots).
+   The `acme-util/.../ipmi/*.csv` files are empty stubs (~133 B). The real, usable,
+   time-indexed telemetry lives **only** in `acme-util/data/utilization/kalos/*.csv`
+   (`Time` column + 2,344 per-GPU columns named `<node-ip>-<gpu-idx>`, e.g. `172.31.13.235-0`).
+
+**Recommended incident source:** drive incidents off `XID_ERRORS.csv` within the Aug
+window. A nonzero Xid is a real, timestamped fault on a specific GPU, and the *same
+window* of `GPU_TEMP` / `POWER_USAGE` / `GPU_UTIL` for that GPU is right there to
+correlate — fully self-consistent and grounded, sidestepping the overlap problem.
+
+---
 
 Fetch everything with:
 
@@ -14,6 +59,14 @@ scripts/download_datasets.sh --list # names only
 All data lands in **`data/`**, which is **gitignored** (too large to commit —
 ~4 GB). The script is idempotent: existing datasets are skipped, so re-running is
 safe and cheap. PAI tarballs are checksum-verified (SHA-256) before extraction.
+
+### DigitalOcean Testing & Storage Setup
+We run our active python services and test suite directly on our DigitalOcean Droplet CPU VM:
+- **Droplet Specs**: 4 GB RAM / 2 Intel vCPUs / 120 GB Storage / SFO3 - Ubuntu 24.04 (LTS) x64 (IP: `134.199.208.214`).
+- **Memory & Swap Configuration**: Cloning large datasets like `acme-util` via Git LFS requires substantial memory when indexing and checking out. The clone process was initially terminated by the Linux Out-Of-Memory (OOM) killer because the VM only had 4 GB of RAM (and no swap space enabled by default).
+  To resolve this, we created and enabled a **16 GB swap file** on the VM.
+- **Disk Optimization via `git lfs fetch`**: The full `acme-util` dataset is ~80 GB. Checking out these files in the working directory while keeping the Git LFS cache would require ~160 GB, exceeding the Droplet's 120 GB disk capacity. To bypass this, the repository was cloned with `GIT_LFS_SKIP_SMUDGE=1` and downloaded using **`git lfs fetch`**. This downloads only the raw cache objects (~80 GB), fitting safely on the VM's disk.
+- **Accessing Cache directly**: We created a utility script `scripts/lfs_helper.py` that lets us read files directly from the `.git/lfs/objects/` cache in Python (e.g. into Pandas) without checking them out, preserving the 0-duplicate footprint. (See [docs/TEAM_GUIDE.md](TEAM_GUIDE.md) for usage details).
 
 ```
 hack/
@@ -94,7 +147,7 @@ df = pd.read_csv("data/pai/pai_sensor_table.csv", names=cols)
 Join keys: `job_name`, `inst_id`, `worker_name`, `machine`.
 **Timestamps are relative seconds** (floats from trace start), *not* wall-clock.
 
-**Most relevant for EvoSentinel:** `pai_sensor_table` (per-worker GPU/mem
+**Most relevant for GPUSitter:** `pai_sensor_table` (per-worker GPU/mem
 utilization → DCGM-style telemetry) and `pai_machine_metric` (per-machine
 health signals). Failure signal: `status` fields (`Failed`, `Terminated`).
 
@@ -107,14 +160,17 @@ failure-pattern and resilience modeling.
 - `data/acme/data/job_trace/trace_seren.csv` — 818K jobs (mixed research/eval)
 - `data/acme/data/job_trace/trace_kalos.csv` — 62K jobs (large LLM pretraining, avg 27 GPU/job)
 - `data/acme/data/cluster_summary.csv` — normalized cross-trace stats (Philly/PAI/Helios/Acme)
-- `data/acme/data/utilization/util_pkl/` — processed GPU util / temp / power pickles
+- `data/acme/data/utilization/util_pkl/` — **CDF distribution pickles** (lists of
+  1000-pt arrays for the paper's plots), *not* time series. Real time-indexed telemetry
+  is `data/acme-util/data/utilization/kalos/*.csv` (see reality check at top).
 
 Columns (headers present): `job_id, user, node_num, gpu_num, cpu_num, type,
 state, submit_time, start_time, end_time, duration, queue, gpu_time`.
 **Timestamps are wall-clock ISO** (`2023-03-01 00:18:22+08:00`).
-`state` ∈ {COMPLETED, FAILED, PREEMPTED, CANCELLED, NODE_FAIL, TIMEOUT} — a
-richer failure taxonomy than PAI's single `Failed` bucket; `NODE_FAIL` is the
-hardware-failure signal closest to EvoSentinel's target.
+In **Kalos specifically**, the only observed states are `COMPLETED`, `FAILED`,
+`CANCELLED`, `RUNNING` — **there is no `NODE_FAIL`** (despite broader AcmeTrace
+docs listing more). The incident signal is `FAILED` + non-null `fail_time`.
+Timestamps are ISO UTC strings, not epoch. (See reality check at top.)
 
 > The `acme` target pulls only job traces + processed pickles. The raw ~80 GB
 > DCGM/Prometheus/IPMI utilization + power data lives on HuggingFace
@@ -149,7 +205,7 @@ committed directly in-repo:
 
 | Goal | Use |
 |------|-----|
-| GPU telemetry / failure detection (EvoSentinel core) | **PAI** sensor + machine_metric |
+| GPU telemetry / failure detection (GPUSitter core) | **PAI** sensor + machine_metric |
 | LLM-cluster failure/queue dynamics | **Acme** (Kalos = pretraining scale) |
 | Scheduling / GPU bin-packing | **PAI** or **v2023** (K8s) |
 | Inference / serving systems | **v2026-GenAI** |
