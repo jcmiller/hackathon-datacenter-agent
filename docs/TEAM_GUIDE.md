@@ -97,11 +97,13 @@ wide CSVs without materializing the ~80 GB frame — so it runs even when
 `data/acme-util` is in the cache-only state above.
 
 ```bash
-# from the repo root on the droplet
-python scripts/build_early_dataset.py \
+# from the repo root on the droplet (PYTHONPATH=src so `gpusitter` imports)
+PYTHONPATH=src python scripts/build_early_dataset.py \
     --repo-dir data/acme-util \
     --metrics GPU_TEMP POWER_USAGE GPU_UTIL MEMORY_TEMP \
     --horizons 60 300 600 --lookback 600 \
+    --gpu-batch-size 150 \
+    --control-gpus 172.31.0.1#0 172.31.0.139#0 ... \
     --out data/early_detection.parquet
 ```
 
@@ -109,6 +111,21 @@ It writes parquet when `pyarrow` is installed, else a sibling `.csv`. The output
 is the compact, reusable table model experiments should read — never re-scan the
 raw telemetry per experiment. Check raw availability first with
 `python scripts/lfs_helper.py kalos-status data/acme-util`.
+
+**Memory (`--gpu-batch-size`).** `TelemetryStore` indexes every observed cell of
+each loaded GPU's *full* timeline as Python objects. The real kalos set is 851
+onset GPUs over a 15-day trace; loading them all at once needs >14 GB and the
+OOM-killer reaps it on the 15 GB droplet. `--gpu-batch-size N` (default 150)
+loads telemetry N GPUs at a time and frees each batch before the next — peak RSS
+~1.7 GB at 150. It re-streams the feature CSVs once per batch (I/O traded for
+memory); the output rows are identical to a single-load build.
+
+**Cluster controls (`--control-gpus`).** Without controls the only negatives are
+same-GPU pre-event points. Pass canonical `node#idx` ids of non-onset GPUs to add
+time-matched cluster controls (a negative for each control at every positive
+`t_ref`) for a production-style imbalanced dataset. Evaluate with
+`scripts/eval_early_dataset.py` (time-ordered, GPU-grouped split; ROC-AUC, AP,
+alert-budget, and a permuted no-signal baseline).
 
 ---
 
