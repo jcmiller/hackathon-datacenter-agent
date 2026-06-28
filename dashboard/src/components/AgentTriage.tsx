@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, Incident, ModelCard } from "../types";
+import type { AgentEvent, Incident, ModelResponse } from "../types";
+import { loadModel } from "../data";
 
 const DISP_META: Record<string, { label: string; cls: string }> = {
   PAGE_TECHNICIAN:  { label: "Page Technician",   cls: "disp-crit" },
@@ -18,14 +19,12 @@ export function AgentTriage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [model, setModel] = useState<ModelCard | null>(null);
+  const [model, setModel] = useState<ModelResponse | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    fetch("/api/model").then(r => r.json()).then(d => {
-      if (d.model) setModel(d.model);
-    }).catch(() => {});
+    loadModel().then(setModel).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -87,9 +86,9 @@ export function AgentTriage({
         }
       } finally {
         setLoading(false);
-        fetch("/api/model").then(r => r.json()).then(d => {
-          if (d.model) setModel(d.model);
-        }).catch(() => {});
+        // Refresh the model card after a triage run — a train/promote event may
+        // have advanced the registry incumbent (self-improvement surface).
+        loadModel().then(setModel).catch(() => {});
       }
     })();
 
@@ -123,13 +122,30 @@ export function AgentTriage({
         </span>
       </div>
 
-      {model && (
+      {model?.model && (
         <div className="model-card">
           <span className="model-label">predictor</span>
-          <span className="model-type">{model.model_type}</span>
-          <span className="model-ver">v{model.version}</span>
-          <span className="model-auc">AUC {model.val_auc != null ? model.val_auc.toFixed(3) : "—"}</span>
-          <span className="model-n">{model.n_samples} samples</span>
+          <span className="model-type">{model.model.model_type}</span>
+          <span className="model-ver">v{model.model.version}</span>
+          <span className="model-auc">
+            AUC {model.model.val_auc != null ? model.model.val_auc.toFixed(3) : "—"}
+          </span>
+          <span className="model-n">{model.model.n_samples} samples</span>
+          {/* Honesty badge: rigorous keep-if-better registry incumbent vs the weak
+              in-process provisional fit, and fixture vs real (bead aow/31n). */}
+          <span
+            className={`model-flag ${model.rigorous ? "flag-rig" : "flag-prov"}`}
+            title={model.note || model.fixture_note || (model.rigorous
+              ? "rigorous keep-if-better registry incumbent (time-split + permutation baseline + leakage probes)"
+              : "provisional in-process fit — not the canonical registry incumbent")}
+          >
+            {model.rigorous ? "rigorous" : "provisional"}
+          </span>
+          {model.fixture && (
+            <span className="model-flag flag-fix" title={model.fixture_note || "illustrative demo numbers — not real Kalos results"}>
+              fixture
+            </span>
+          )}
         </div>
       )}
 

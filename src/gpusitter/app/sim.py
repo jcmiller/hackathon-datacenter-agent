@@ -37,6 +37,12 @@ _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "early_detection"
 MONITOR_FIXTURE_DATA_PATH = str(_FIXTURE_DIR / "features.csv")
 MONITOR_FIXTURE_REGISTRY_PATH = str(_FIXTURE_DIR / "registry")
 
+# Self-improvement learning curve (v0->vN keep-if-better history). The repo-root
+# artifact (built by scripts/learning_curve_demo.py) wins; a committed in-package
+# copy is the off-droplet fallback so the curve always renders. Overridable in tests.
+LEARNING_CURVE_PATH = "docs/learning_curve.json"
+LEARNING_CURVE_FALLBACK = str(Path(__file__).parent / "fixtures" / "learning_curve.json")
+
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
 _assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
@@ -480,6 +486,35 @@ def get_monitor(budget: float | None = None, horizon: float | None = None):
     if is_fixture:
         report["fixture_note"] = fixture_note
     return report
+
+
+@app.get("/api/learning-curve")
+def get_learning_curve():
+    """The v0->vN self-improvement curve — the keep-if-better registry history.
+
+    Each entry carries the held-out ROC-AUC, the signal gap over the no-skill
+    baseline, and the hypothesis/reflection that drove the iteration, so the
+    dashboard can render the self-improvement story as a real learning curve
+    rather than a single static metric (bead 31n AC).
+
+    Resolution mirrors the other surfaces: the repo-root artifact at
+    ``LEARNING_CURVE_PATH`` wins; an in-package committed copy is the off-droplet
+    fallback; an honest ``available:false`` floor when neither exists. The curve is
+    explicitly badged ``synthetic`` (the table is a deliberately weak demo, see the
+    embedded ``honest_note`` / ``real_data_reference``).
+    """
+    for path in (LEARNING_CURVE_PATH, LEARNING_CURVE_FALLBACK):
+        p = Path(path)
+        if p.exists():
+            data = json.loads(p.read_text())
+            data["available"] = True
+            data.setdefault("dataSource", "synthetic")
+            return data
+    return {
+        "available": False,
+        "dataSource": "unavailable",
+        "reason": "no learning-curve artifact (run scripts/learning_curve_demo.py)",
+    }
 
 
 @app.post("/api/feedback")

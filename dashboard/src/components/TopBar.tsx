@@ -1,9 +1,11 @@
-import type { Fleet, Incident, Meta } from "../types";
+import type { Fleet, Incident, Meta, SourceBadge } from "../types";
+import { ProvenanceBadge } from "./ProvenanceBadge";
 
 export function TopBar({
   meta,
   incidents,
   fleet,
+  source,
   feedCollapsed,
   setFeedCollapsed,
   triageCollapsed,
@@ -13,6 +15,7 @@ export function TopBar({
   meta: Meta | null;
   incidents: Incident[];
   fleet: Fleet | null;
+  source: SourceBadge | null;
   feedCollapsed: boolean;
   setFeedCollapsed: (c: boolean) => void;
   triageCollapsed: boolean;
@@ -93,6 +96,7 @@ export function TopBar({
         </div>
       </div>
       <div className="kpis">
+        <ProvenanceBadge source={source} />
         <Kpi v={meta ? meta.totalGpus.toLocaleString() : "—"} l="GPUs" />
         <Kpi
           v={fleet ? fleet.faulted.toLocaleString() : "—"}

@@ -663,3 +663,112 @@
   border-radius: 4px;
   border: 1px solid rgba(239,68,68,0.2);
 }
+
+/* ---- provenance / honesty badge (bead 31n) -------------------------------- */
+.prov-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  cursor: help;
+}
+.prov-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-faint);
+  flex: 0 0 auto;
+}
+.prov-dot.live {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+  animation: prov-pulse 1.8s ease-in-out infinite;
+}
+@keyframes prov-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.prov-real    { color: var(--ok);   border-color: rgba(127,168,107,0.4); background: rgba(127,168,107,0.08); }
+.prov-fixture { color: var(--warn); border-color: rgba(217,164,65,0.4);  background: rgba(217,164,65,0.08); }
+.prov-unavail { color: var(--crit); border-color: rgba(196,91,74,0.4);   background: rgba(196,91,74,0.08); }
+
+/* ---- model honesty flags --------------------------------------------------- */
+.model-flag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: help;
+}
+.flag-rig  { color: var(--ok);   background: rgba(127,168,107,0.14); }
+.flag-prov { color: var(--warn); background: rgba(217,164,65,0.14); }
+.flag-fix  { color: var(--warn); background: rgba(217,164,65,0.14); border: 1px solid rgba(217,164,65,0.4); }
+
+/* ---- self-improvement panel (bead 31n) ------------------------------------ */
+.self-improve .panel-title { justify-content: space-between; }
+.si-body { display: flex; flex-direction: column; gap: 14px; padding: 12px; }
+.si-block { display: flex; flex-direction: column; gap: 6px; }
+.si-head { display: flex; justify-content: space-between; align-items: baseline; }
+.si-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  font-size: 10px;
+  font-weight: 700;
+}
+.si-curve { background: rgba(255,255,255,0.02); border-radius: 4px; }
+.si-final { font-size: 10px; }
+
+.si-budget-tabs { display: flex; gap: 6px; margin: 2px 0; }
+.si-tab {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--fg-faint);
+  cursor: pointer;
+}
+.si-tab.sel { color: var(--accent); border-color: var(--accent-dim); }
+
+.si-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.si-table th {
+  text-align: left;
+  color: var(--fg-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  padding: 2px 4px;
+}
+.si-table td { padding: 3px 4px; border-top: 1px solid var(--border-soft); }
+.si-table td.crit { color: var(--crit); }
+
+.recall-bar {
+  position: relative;
+  display: inline-block;
+  width: 86px;
+  height: 13px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.recall-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(127,168,107,0.45);
+}
+.recall-val {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--fg);
+}
