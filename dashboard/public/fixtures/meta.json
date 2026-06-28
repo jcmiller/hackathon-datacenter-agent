@@ -1,1 +1,1 @@
-{"window": ["2023-08-29 13:25:00+08:00", "2023-08-29 14:05:00+08:00"], "cascadeTs": "2023-08-29 13:57:30+08:00", "totalGpus": 2344, "faulted": 882, "nodesAffected": 141, "source": "AcmeTrace Kalos (Shanghai AI Lab), Aug-29 2023 cascade"}
+{"window": ["2023-08-17 05:55:00+08:00", "2023-08-17 06:05:00+08:00"], "cascadeTs": "2023-08-17 06:00:30+08:00", "totalGpus": 2344, "faulted": 116, "nodesAffected": 74, "source": "AcmeTrace Kalos (Shanghai AI Lab) \u2014 Aug-17 2023 06:00 correlated Xid burst (116 GPUs / 74 nodes, Xid 43-dominant). Derived demo fixture; raw data unchanged."}

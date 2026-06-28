@@ -84,17 +84,17 @@ def test_onset_without_code_leaves_xid_unobserved():
 def test_dashboard_fixture_lifts_observed_xid():
     raw = {
         "id": "INC-001",
-        "ts": "2023-08-29 13:57:30+08:00",
+        "ts": "2023-08-17 06:00:30+08:00",
         "gpu": {"node": "172.31.15.220", "idx": 4},
         "xid": 43,
         "severity": "warn",
-        "correlatedCount": 881,
+        "correlatedCount": 115,
     }
     inc = canonical_incident(raw)
     assert inc["incident_id"] == "INC-001"
     assert inc["observed"]["xid"] == 43
     assert inc["observed"]["gpu"] == "172.31.15.220-4"
-    assert inc["fail_time"] == "2023-08-29 13:57:30+08:00"
+    assert inc["fail_time"] == "2023-08-17 06:00:30+08:00"
     assert inc["source"] == "xid_onset"
 
 
