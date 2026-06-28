@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type {
-  AgentRuns,
   Fleet,
   Incident,
   Meta,
@@ -8,7 +7,6 @@ import type {
   Point,
 } from "./types";
 import {
-  loadAgentRuns,
   loadFleet,
   loadMeta,
   loadTelemetry,
@@ -23,7 +21,6 @@ export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [runs, setRuns] = useState<AgentRuns>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedGpuId, setSelectedGpuId] = useState<string | null>(null);
   const [tele, setTele] = useState<TelemetryWindow | null>(null);
@@ -34,8 +31,8 @@ export function App() {
 
   // initial load — load initial topology and agent run definitions
   useEffect(() => {
-    Promise.all([loadFleet(), loadMeta(), loadAgentRuns()])
-      .then(([fl, mt, rn]) => {
+    Promise.all([loadFleet(), loadMeta()])
+      .then(([fl, mt]) => {
         // Start with a clean healthy cluster where all cells are initialized as active/idle
         // to clearly demonstrate the live incoming incident stream turning cells red!
         const healthyCells = fl.cells.map(c => ({
@@ -49,7 +46,6 @@ export function App() {
           faulted: 0
         });
         setMeta(mt);
-        setRuns(rn);
       })
       .catch((e) => console.error("fixture load failed", e));
 
@@ -180,7 +176,7 @@ export function App() {
         {!triageCollapsed && (
           <AgentTriage
             incidentId={selectedId}
-            events={selectedId ? runs[selectedId] ?? null : null}
+            incidentData={selectedId ? incidents.find(i => i.id === selectedId) ?? null : null}
           />
         )}
       </div>

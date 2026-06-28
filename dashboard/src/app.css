@@ -241,6 +241,14 @@
 .ev.user .line {
   color: var(--fg);
 }
+.ev.file { border-left: 2px solid var(--warn); }
+.ev.file .file-entry {
+  margin: 4px 0 0 0;
+  font-size: 10px;
+  color: var(--dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
 .disp {
   border-top: 1px solid var(--border);
   padding: 12px;

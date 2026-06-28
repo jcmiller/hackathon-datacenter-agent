@@ -51,11 +51,12 @@ export interface Meta {
   source: string;
 }
 
-// Agent reasoning stream events (one canned trace per incident in agentRuns.json)
+// Agent reasoning stream events
 export type AgentEvent =
   | { type: "user"; text: string }
   | { type: "tool_call"; tool: string; args: string }
   | { type: "observation"; text: string }
+  | { type: "file_update"; path: string; entry: Record<string, unknown> }
   | {
       type: "disposition";
       disposition: string;
