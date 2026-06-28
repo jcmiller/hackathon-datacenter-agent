@@ -35,6 +35,16 @@ testpaths = ["tests"]
 # tests import the repo-level `scripts` package (lfs_helper, precompute) under
 # the bare `pytest` console script, not only `python -m pytest`.
 pythonpath = ["."]
+# -ra: summarize every non-passing outcome. --strict-markers / --strict-config:
+# an unregistered marker or an unknown ini key is a hard error, not a silent typo.
+addopts = "-ra --strict-markers --strict-config"
+# Registered markers (required under --strict-markers). Select a group with
+# `-m smoke`; exclude it with `-m 'not smoke'`.
+markers = [
+    "smoke: fast package-import / wiring sanity checks",
+]
+# An xfail that unexpectedly passes is a failure, so stale xfails can't hide.
+xfail_strict = true
 filterwarnings = [
     "ignore:BaseAgentConfig is deprecated:DeprecationWarning",
     "ignore:Using .httpx. with .starlette.testclient. is deprecated",
