@@ -1,3 +1,6 @@
+import backend.stream as stream
+import backend.dataset as dataset
+import backend.classifier as classifier
 from backend.loader import load_incidents, telemetry_window, correlated_failures
 from backend.memory import search_incidents, append_incident
 
@@ -41,10 +44,6 @@ def record_resolution(incident_type, summary, disposition, resolution):
                      "disposition": disposition, "resolution": resolution}, SOP_PATH)
     return {"recorded": True}
 
-# --- appended to backend/tools.py ---
-import backend.stream as stream
-import backend.dataset as dataset
-import backend.classifier as classifier
 
 def get_sensory(job_id):
     """Return telemetry-aggregate fields for a job from accumulated history."""
