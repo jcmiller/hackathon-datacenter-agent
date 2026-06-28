@@ -85,3 +85,47 @@ def test_triage_endpoint_wiring(monkeypatch):
     r = client.post("/api/triage", json={"job_id": "JOB001", "state": "NODE_FAIL"})
     assert r.status_code == 200
     assert r.json()["disposition"] == "restart-and-watch"
+
+
+def test_triage_stream_yields_events(monkeypatch):
+    import backend.agent as agent_mod
+    from google.adk.agents import Agent
+    from google.adk.runners import InMemoryRunner
+
+    # Stub runner events so no real API call happens
+    class FakeSession:
+        id = "s1"
+
+    class FakeSessionService:
+        def create_session_sync(self, **kwargs):
+            return FakeSession()
+
+    class FakeRunner:
+        session_service = FakeSessionService()
+
+        def run(self, **kwargs):
+            from unittest.mock import MagicMock
+            tc = MagicMock(); tc.name = "get_telemetry"; tc.args = {"fail_time": 100}
+            ev1 = MagicMock()
+            ev1.tool_calls = [tc]
+            ev1.tool_responses = []
+            ev1.content = None
+            tr = MagicMock(); tr.response = {"DCGM_FI_DEV_POWER_USAGE": 200}
+            ev2 = MagicMock()
+            ev2.tool_calls = []
+            ev2.tool_responses = [tr]
+            ev2.content = None
+            part = MagicMock(); part.text = "restart recommended"
+            content = MagicMock(); content.parts = [part]
+            ev3 = MagicMock()
+            ev3.tool_calls = []
+            ev3.tool_responses = []
+            ev3.content = content
+            return [ev1, ev2, ev3]
+
+    monkeypatch.setattr(agent_mod, "InMemoryRunner", lambda **kw: FakeRunner())
+    events = list(agent_mod.triage_stream({"job_id": "J1", "fail_time": 100}))
+    types = [e["type"] for e in events]
+    assert "tool_call" in types
+    assert "observation" in types
+    assert "disposition" in types

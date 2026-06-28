@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from backend.loader import load_incidents
-from backend.agent import triage  # noqa: F401 — re-exported so tests can monkeypatch
+from backend.agent import triage_stream as triage  # noqa: F401 — re-exported so tests can monkeypatch
 
 from fastapi.staticfiles import StaticFiles
 import logging
