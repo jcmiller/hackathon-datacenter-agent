@@ -24,10 +24,21 @@ Three-pane mission control over a top KPI bar:
 
 ## Data
 
-All panels read **real AcmeTrace Kalos telemetry** (Shanghai AI Lab, Aug 2023)
-as static fixtures in `public/fixtures/`, generated around the **Aug-29 13:57
-cluster-wide Xid cascade** (882 GPUs across 141 nodes — the team's hero event).
-See `../docs/data-findings.md` and `../docs/DATA.md`.
+All panels read **AcmeTrace Kalos telemetry** (Shanghai AI Lab, Aug 2023) as
+static fixtures in `public/fixtures/`, framed around the **Aug-17 06:00
+correlated Xid burst** — the verified hero event: **116 GPUs across 74 nodes
+fault within ~30 s**, Xid 43-dominant, scattered (≤4-of-8 per node), with no
+thermal/power precursor. See `../docs/incident-aug17-0600.md` (bead `6xk`) for
+the full characterization, plus `../docs/data-findings.md` and `../docs/DATA.md`.
+
+> **Derived demo fixture.** These are *derived* fixtures: raw Kalos data is
+> unchanged and historically correct. The earlier "Aug-29 13:57 / 882 GPU"
+> framing was a **latched-state + window-edge artifact** (XID is a latched DCGM
+> gauge; a window opening mid-fault misreads pre-latched GPUs as fresh onsets) —
+> under empty-aware edge detection Aug-29 has **1** true onset, so it is not used
+> here. The fixture's headline numbers (116/74/43-dominant) match the real
+> Aug-17 06:00 burst; per-GPU cells are illustrative coordinates sampled from the
+> fleet, not the literal onset roster (which lives only in the droplet CSVs).
 
 ## Backend
 
