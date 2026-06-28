@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, Incident, ModelCard } from "../types";
+import type { AgentEvent, Incident } from "../types";
 
 const DISP_META: Record<string, { label: string; cls: string }> = {
   PAGE_TECHNICIAN:  { label: "Page Technician",   cls: "disp-crit" },
@@ -18,15 +18,8 @@ export function AgentTriage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [model, setModel] = useState<ModelCard | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    fetch("/api/model").then(r => r.json()).then(d => {
-      if (d.model) setModel(d.model);
-    }).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!loading) { setElapsed(0); return; }
@@ -87,9 +80,6 @@ export function AgentTriage({
         }
       } finally {
         setLoading(false);
-        fetch("/api/model").then(r => r.json()).then(d => {
-          if (d.model) setModel(d.model);
-        }).catch(() => {});
       }
     })();
 
@@ -122,16 +112,6 @@ export function AgentTriage({
           {loading ? `${elapsed}s` : incidentId ?? ""}
         </span>
       </div>
-
-      {model && (
-        <div className="model-card">
-          <span className="model-label">predictor</span>
-          <span className="model-type">{model.model_type}</span>
-          <span className="model-ver">v{model.version}</span>
-          <span className="model-auc">AUC {model.val_auc != null ? model.val_auc.toFixed(3) : "—"}</span>
-          <span className="model-n">{model.n_samples} samples</span>
-        </div>
-      )}
 
       {loading && (
         <div className={`triage-status ${awaitingTool ? "status-tool" : "status-think"}`}>
