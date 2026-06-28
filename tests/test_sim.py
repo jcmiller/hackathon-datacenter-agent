@@ -583,3 +583,47 @@ def test_telemetry_unknown_incident_404(monkeypatch):
     assert "INC-999" in body["error"]
     assert body["available"], "404 must list the real incidents that DO exist"
     assert body["dataSource"] == "real_substrate"
+
+
+# ---------------------------------------------------------------------------
+# /api/learning-curve — the v0->vN self-improvement visual (bead 31n)
+# ---------------------------------------------------------------------------
+
+
+def test_learning_curve_serves_versioned_curve():
+    """The endpoint exposes the keep-if-better v0->vN curve with held-out ROC-AUC and
+    the signal gap over the no-skill baseline, so the React surface can render the
+    self-improvement story (bead 31n AC)."""
+    body = client.get("/api/learning-curve").json()
+    assert body["available"] is True
+    curve = body["curve"]
+    assert len(curve) >= 2, "a curve needs at least a baseline and one promotion"
+    # versions present and each point carries the fields the React chart reads.
+    for pt in curve:
+        assert "version" in pt
+        assert isinstance(pt["roc_auc"], (int, float))
+        assert "signal_gap" in pt
+    # the no-skill baseline anchors the floor at ~0.5.
+    assert any(abs(pt["roc_auc"] - 0.5) < 1e-6 for pt in curve)
+    # honest badging: the demo table is synthetic/weak by construction.
+    assert body["dataSource"] == "synthetic"
+    assert "honest_note" in body
+
+
+def test_learning_curve_falls_back_to_packaged_copy(monkeypatch):
+    """Off-droplet (no repo-root docs artifact) the committed in-package copy still
+    renders the curve — the self-improvement surface is never blank when shipped."""
+    monkeypatch.setattr(sim, "LEARNING_CURVE_PATH", "docs/__nope__.json")
+    body = client.get("/api/learning-curve").json()
+    assert body["available"] is True
+    assert body["curve"]
+
+
+def test_learning_curve_unavailable_when_absent(tmp_path, monkeypatch):
+    """Neither the repo-root artifact nor the packaged copy -> honest unavailable
+    floor, never fabricated numbers."""
+    monkeypatch.setattr(sim, "LEARNING_CURVE_PATH", str(tmp_path / "nope.json"))
+    monkeypatch.setattr(sim, "LEARNING_CURVE_FALLBACK", str(tmp_path / "nope2.json"))
+    body = client.get("/api/learning-curve").json()
+    assert body["available"] is False
+    assert body["dataSource"] == "unavailable"

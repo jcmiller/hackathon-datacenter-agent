@@ -3,6 +3,7 @@ import type {
   Fleet,
   Incident,
   Meta,
+  SourceBadge,
   TelemetryWindow,
 } from "./types";
 import {
@@ -16,6 +17,7 @@ import { FleetHeatmap } from "./components/FleetHeatmap";
 import { TelemetryStrip } from "./components/TelemetryStrip";
 import { AgentTriage } from "./components/AgentTriage";
 import { ComputerUsePanel } from "./components/ComputerUse";
+import { SelfImprovement } from "./components/SelfImprovement";
 
 export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -24,6 +26,10 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedGpuId, setSelectedGpuId] = useState<string | null>(null);
   const [tele, setTele] = useState<TelemetryWindow | null>(null);
+  // Honesty badge for the dashboard substrate (meta/fleet/telemetry/incidents).
+  // Sourced from the NAMED provenance SSE event (bead h7w contract), with the
+  // /api/meta payload as a fallback when the stream hasn't reported yet.
+  const [source, setSource] = useState<SourceBadge | null>(null);
 
   // Collapsible panels state
   const [feedCollapsed, setFeedCollapsed] = useState(false);
@@ -40,21 +46,42 @@ export function App() {
           ...c,
           status: (c.status === "fault" ? "active" : c.status) as "fault" | "active" | "idle"
         }));
-        
+
         setFleet({
           ...fl,
           cells: healthyCells,
           faulted: 0
         });
         setMeta(mt);
+        // Fallback badge from the meta payload until the SSE provenance event lands.
+        setSource((prev) =>
+          prev ?? {
+            dataSource: mt.dataSource ?? fl.dataSource ?? "unavailable",
+            provenance: mt.provenance ?? fl.provenance ?? null,
+          },
+        );
       })
-      .catch((e) => console.error("fixture load failed", e));
+      .catch((e) => console.error("dashboard load failed", e));
 
     // Connect to live SSE stream for real-time incidents!
-    const source = new EventSource('/api/incidents');
-    source.onmessage = (event) => {
+    const es = new EventSource('/api/incidents');
+
+    // NAMED provenance event (bead h7w): the stream emits the data-source badge on
+    // its OWN event channel so onmessage stays Incident-only and back-compatible.
+    // We MUST read it via addEventListener — onmessage never sees a named event.
+    es.addEventListener('provenance', (event) => {
+      try {
+        const payload = JSON.parse((event as MessageEvent).data) as SourceBadge;
+        setSource(payload);
+      } catch {
+        /* malformed provenance frame — keep the meta-derived fallback badge */
+      }
+    });
+
+    // Unnamed message frames are Incidents (every one dereferences incident.gpu).
+    es.onmessage = (event) => {
       const incident = JSON.parse(event.data) as Incident;
-      
+
       setIncidents((prev) => {
         if (prev.some((i) => i.id === incident.id)) return prev;
         const next = [incident, ...prev];
@@ -88,7 +115,7 @@ export function App() {
     };
 
     return () => {
-      source.close();
+      es.close();
     };
   }, []);
 
@@ -125,6 +152,7 @@ export function App() {
         meta={meta}
         incidents={incidents}
         fleet={fleet}
+        source={source}
         feedCollapsed={feedCollapsed}
         setFeedCollapsed={setFeedCollapsed}
         triageCollapsed={triageCollapsed}
@@ -153,6 +181,7 @@ export function App() {
             onSelectGpu={selectGpu}
           />
           <TelemetryStrip tele={tele} />
+          <SelfImprovement />
         </div>
         {!triageCollapsed && (
           <AgentTriage
