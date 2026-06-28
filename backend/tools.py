@@ -54,7 +54,11 @@ def get_sensory(job_id):
 
 def train_and_validate(model_type, features):
     """Fit a candidate on jobs-so-far, score val ROC-AUC, promote if it beats the incumbent."""
-    X, y = dataset.build_xy(stream.HISTORY, features)
+    try:
+        X, y = dataset.build_xy(stream.HISTORY, features)
+    except KeyError:
+        # the agent picked a feature name absent from the streamed records
+        return {"trained": False, "reason": "unknown feature"}
     Xtr, ytr, Xval, yval = dataset.time_split(X, y, val_frac=0.3)
     if len(set(ytr)) < 2 or len(set(yval)) < 2:
         return {"trained": False, "reason": "insufficient class balance"}

@@ -10,6 +10,8 @@ from backend.agent import triage  # noqa: F401 — re-exported so tests can monk
 app = FastAPI()
 
 JOBS_CSV = "data/jobs.csv"
+# Must be < the number of FAILED jobs in JOBS_CSV, else warm-start consumes the
+# whole file and the live SSE stream emits nothing. (mock jobs.csv has 232 FAILED.)
 WARM_START_INCIDENTS = 100
 STEP_SECONDS = 3
 
