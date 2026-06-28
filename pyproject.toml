@@ -17,7 +17,9 @@ dependencies = [
     "scikit-learn==1.9.0",
 ]
 
-[project.optional-dependencies]
+# uv-native dev group: installed by default on `uv sync` (unlike an optional
+# extra), so the bare `pytest` console script is present.
+[dependency-groups]
 dev = ["pytest==9.1.1"]
 
 [tool.hatch.build.targets.wheel]
@@ -25,6 +27,10 @@ packages = ["src/gpusitter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# gpusitter resolves via the (editable) install; repo root on the path lets the
+# tests import the repo-level `scripts` package (lfs_helper, precompute) under
+# the bare `pytest` console script, not only `python -m pytest`.
+pythonpath = ["."]
 filterwarnings = [
     "ignore:BaseAgentConfig is deprecated:DeprecationWarning",
     "ignore:Using .httpx. with .starlette.testclient. is deprecated",
