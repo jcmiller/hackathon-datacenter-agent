@@ -15,11 +15,14 @@ consume:
 Why "events" and not nonzero cells
 ----------------------------------
 ``XID_ERRORS.csv`` is a DCGM *gauge*: it holds the GPU's last Xid code and
-re-emits it every 15s sample until the GPU is reset/cleared. A single fault
-therefore paints tens of thousands of nonzero cells. An EVENT is a *rising
-edge*: a transition from 0/clear to a nonzero code, or a change to a different
-nonzero code. (On the real trace, code 43 shows 59M nonzero cells but only 830
-events -- a ~71,000x difference.)
+re-emits it every 15s sample until the GPU is reset/cleared. A healthy/cleared
+GPU has an *empty* cell (the trace carries no explicit ``0`` cells), so empty ==
+cleared baseline. A single fault therefore paints tens of thousands of repeated
+nonzero cells. An EVENT is a *rising edge*: empty/0 -> nonzero (the GPU's first
+nonzero appearance), or a change to a different nonzero code. Codes already
+present in the first sample (t0) are left-censored (onset predates the window)
+and excluded. (On the real trace, code 43 paints tens of millions of nonzero
+cells but only a few hundred events.)
 
 Scale discipline
 ----------------
@@ -95,35 +98,70 @@ class XidEvent(NamedTuple):
 # --------------------------------------------------------------------------- #
 # 1. Event extraction (rising-edge detection over the gauge)
 # --------------------------------------------------------------------------- #
+def _first_timestamp(xid_csv: str) -> str | None:
+    """The trace's first data-row timestamp (cheap: reads only the first row).
+
+    Used as the left-censoring boundary. Read from the Time column directly, not
+    from the first *non-empty* record, so it is correct even if the first row has
+    no faulted GPUs.
+    """
+    import csv
+
+    with open(xid_csv, newline="") as fh:
+        reader = csv.reader(fh)
+        next(reader, None)  # header
+        for row in reader:
+            if row:
+                return row[0]
+    return None
+
+
 def extract_events(xid_csv: str) -> list[XidEvent]:
     """Stream XID_ERRORS and return true fault events (rising edges).
 
-    A record's value is the gauge's current code. We track the last code per
-    GPU; an event fires when the code becomes a *different nonzero* value than
-    the GPU's previous code.
+    Gauge semantics on this trace: a cell holds the GPU's current Xid code and is
+    re-emitted every sample until cleared; a **healthy/cleared** GPU has an
+    *empty* cell (the data contains no explicit ``0`` cells). So absent/empty is
+    the cleared baseline, and a fault *event* is a rising edge: empty/0 -> nonzero
+    (the GPU's first nonzero appearance), or a change to a *different* nonzero
+    code while held.
 
-    Left-censoring: a GPU whose *first observed* (first non-empty) sample is
-    already nonzero is **not** counted as an event. That code was raised before
-    the observation window opened, so its true onset is unknown — emitting it
-    would manufacture a rising edge at the window boundary. The first sample only
-    establishes the GPU's baseline code; events fire on transitions seen *after*
-    it. (A GPU that first appears clear, then later faults, is a genuine onset.)
+    Left-censoring: a code already present in the trace's **first sample** (t0)
+    was raised before the observation window opened, so its true onset is unknown
+    and it is **not** counted. This excludes only those boundary states — a GPU
+    that is healthy (empty) at t0 and first faults later is a genuine observed
+    onset and IS counted. (Earlier rework wrongly suppressed *every* GPU's first
+    non-empty sample, which — because healthy is empty here — discarded almost all
+    real onsets.)
     """
+    first_ts = _first_timestamp(xid_csv)
     last: dict[str, int] = {}
     events: list[XidEvent] = []
     for rec in iter_long_records(xid_csv, "XID_ERRORS"):
         gpu = rec.gpu.canonical
         code = int(rec.value)
-        if gpu not in last:
-            # First observation: seed baseline state, never emit (left-censored
-            # if already nonzero; nothing to transition from if clear).
-            last[gpu] = code
-            continue
-        prev = last[gpu]
-        if code != 0 and code != prev:
+        prev = last.get(gpu, 0)  # empty/absent cell == cleared/healthy baseline
+        if code != 0 and code != prev and rec.t != first_ts:
             events.append(XidEvent(gpu=gpu, t=rec.t, code=code))
         last[gpu] = code
     return events
+
+
+def left_censored_count(xid_csv: str) -> int:
+    """Distinct GPUs already nonzero at the trace's first sample (t0).
+
+    These are excluded by :func:`extract_events` as left-censored. Reported for
+    transparency (they are the gap between raw rising edges and counted onsets).
+    """
+    import csv
+
+    with open(xid_csv, newline="") as fh:
+        reader = csv.reader(fh)
+        next(reader, None)  # header
+        for row in reader:
+            if row:
+                return sum(1 for c in row[1:] if c not in ("", "0"))
+    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -417,6 +455,7 @@ def characterize(
         raise SystemExit(f"XID_ERRORS.csv not found/usable under {data_dir}")
 
     events = extract_events(xid_csv)
+    n_left_censored = left_censored_count(xid_csv)
     first, last, span = observed_span_seconds(xid_csv)
 
     # Total GPUs present in the XID header (the fleet under observation).
@@ -458,6 +497,7 @@ def characterize(
             "span_days": round(span / 86400.0, 2),
             "sample_seconds": SAMPLE_SECONDS,
             "n_gpus_total": n_gpus_total,
+            "n_left_censored": n_left_censored,
         },
         "frequency": freq,
         "temporal": temporal,
@@ -467,7 +507,9 @@ def characterize(
         ],
         "label_scheme": {
             "event_definition": "rising edge of XID_ERRORS gauge "
-            "(0/clear -> nonzero, or change to a different nonzero code)",
+            "(empty/0 cleared-baseline -> nonzero, or change to a different "
+            "nonzero code); codes already present at the first sample (t0) are "
+            "left-censored and excluded",
             "severity_groups": XID_SEVERITY,
             "horizons_seconds": horizons_seconds,
             "baseline_seconds": baseline_seconds,
@@ -515,7 +557,8 @@ def main() -> int:
     )
     print(
         f"events: {freq['total_events']} on {freq['distinct_event_gpus']} GPUs | "
-        f"MTBF {freq['mtbf_gpu_hours_per_event']} GPU-h/event"
+        f"MTBF {freq['mtbf_gpu_hours_per_event']} GPU-h/event "
+        f"(+{obs['n_left_censored']} left-censored at t0, excluded)"
     )
     for code, info in freq["by_code"].items():
         print(f"  xid {code:>4}: {info['events']:>5}  {info['meaning']}")

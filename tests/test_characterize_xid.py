@@ -103,25 +103,46 @@ def test_no_events_when_all_clear(tmp_path):
 
 
 def test_left_censored_first_sample_excluded(tmp_path):
-    """A GPU already nonzero at its FIRST observed sample is left-censored: its
-    onset predates the window, so it is NOT an event. Setup is the wrong/raw
+    """A GPU already nonzero at the trace's FIRST sample (t0) is left-censored:
+    its onset predates the window, so it is NOT an event. Setup is the wrong/raw
     state (a held 43 from the very first row); the corrected result is zero
-    events. Deleting the first-observation guard would manufacture a boundary
-    rising edge and fail this."""
+    events. Deleting the t0 guard would manufacture a boundary rising edge."""
     gpus = ["10.0.0.1-0"]
-    rows = [(i, {"10.0.0.1-0": "43"}) for i in range(10)]  # nonzero from row 0
+    rows = [(i, {"10.0.0.1-0": "43"}) for i in range(10)]  # nonzero from row 0 (t0)
     csv = tmp_path / "XID_ERRORS.csv"
     _write_wide(csv, gpus, rows)
     assert cx.extract_events(str(csv)) == []
 
 
-def test_left_censored_then_clear_then_refault_is_one_event(tmp_path):
-    """A left-censored GPU (nonzero at first sample) that later clears and
-    re-faults yields exactly ONE event — the observed re-fault — not two. The
-    pre-window 43 is suppressed; only the genuine in-window onset counts."""
+def test_midtrace_onset_counted_but_t0_onset_suppressed(tmp_path):
+    """The discriminating case for the gauge's empty==healthy semantics.
+
+    Empty (healthy) cells are the cleared baseline, so a GPU's FIRST nonzero
+    appearing *mid-trace* is a genuine observed onset and must be counted; only a
+    code already present at t0 is left-censored. GPU B is nonzero at t0 (drop);
+    GPU A is empty until it first faults at t3 (keep). Suppressing every GPU's
+    first observation (the rejected over-fix) would wrongly drop A and yield no
+    events here — this asserts exactly one event, A's onset."""
+    gpus = ["10.0.0.1-0", "10.0.0.2-0"]
+    rows = [
+        (0, {"10.0.0.2-0": "43"}),  # B nonzero at t0 -> left-censored (A empty)
+        (1, {"10.0.0.2-0": "43"}),
+        (2, {"10.0.0.2-0": "43"}),
+        (3, {"10.0.0.1-0": "31", "10.0.0.2-0": "43"}),  # A's first fault -> event
+    ]
+    csv = tmp_path / "XID_ERRORS.csv"
+    _write_wide(csv, gpus, rows)
+    events = cx.extract_events(str(csv))
+    assert [(e.gpu, e.code, e.t) for e in events] == [("10.0.0.1#0", 31, _ts(3))]
+
+
+def test_t0_left_censored_then_clear_then_refault_is_one_event(tmp_path):
+    """A t0-left-censored GPU that later clears and re-faults yields exactly ONE
+    event — the observed re-fault — not two. The t0 43 is suppressed; only the
+    genuine in-window onset counts."""
     gpus = ["10.0.0.1-0"]
     rows = [
-        (0, {"10.0.0.1-0": "43"}),  # left-censored: already faulted, suppressed
+        (0, {"10.0.0.1-0": "43"}),  # left-censored at t0, suppressed
         (1, {"10.0.0.1-0": "43"}),
         (2, {"10.0.0.1-0": "0"}),   # cleared
         (3, {"10.0.0.1-0": "43"}),  # genuine observed re-fault -> 1 event
@@ -130,6 +151,21 @@ def test_left_censored_then_clear_then_refault_is_one_event(tmp_path):
     _write_wide(csv, gpus, rows)
     events = cx.extract_events(str(csv))
     assert [(e.code, e.t) for e in events] == [(43, _ts(3))]
+
+
+def test_first_row_all_empty_then_onset_counted(tmp_path):
+    """t0 is read from the Time column, not the first non-empty record: if the
+    first row is all-empty (no faults at t0), a GPU faulting on a later row is a
+    genuine onset, not suppressed. Guards the _first_timestamp boundary."""
+    gpus = ["10.0.0.1-0"]
+    rows = [
+        (0, {}),                    # all-empty first row (t0); no faults
+        (1, {"10.0.0.1-0": "43"}),  # first nonzero, after t0 -> event
+    ]
+    csv = tmp_path / "XID_ERRORS.csv"
+    _write_wide(csv, gpus, rows)
+    events = cx.extract_events(str(csv))
+    assert [(e.code, e.t) for e in events] == [(43, _ts(1))]
 
 
 def test_distribution_counts(tmp_path):
