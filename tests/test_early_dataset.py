@@ -57,6 +57,20 @@ def _xid_csv(tmp_path):
     return _write(tmp_path, "XID_ERRORS.csv", "\n".join(rows) + "\n")
 
 
+def test_xid_onsets_detects_idle_to_fault(tmp_path):
+    # Navigator repro (bug 1): a GPU idle (empty) in one row then faulting in the
+    # next is a real onset — it must NOT be dropped as left-censored. The
+    # empty-skipping long-record reader misses this; the empty-aware detector
+    # catches it.
+    csv = "\n".join([
+        "Time,n1-0",
+        f"{_iso(_t(0))},",     # idle (empty cell)
+        f"{_iso(_t(1))},43",   # idle -> fault  => one onset
+    ]) + "\n"
+    onsets = xid_onsets(_write(tmp_path, "XID_ERRORS.csv", csv))
+    assert [(o.gpu.canonical, o.t) for o in onsets] == [("n1#0", _t(1))]
+
+
 def test_xid_onsets_detects_transitions_and_excludes_left_censored(tmp_path):
     onsets = xid_onsets(_xid_csv(tmp_path))
     got = {(o.gpu.canonical, o.t) for o in onsets}
@@ -227,6 +241,38 @@ def test_build_dataset_reads_through_lfs_cache_when_worktree_deleted(tmp_path):
     df = pd.read_csv(out)
     assert set(df["label"]) == {0, 1}
     assert (df["event_source"] == XID_METRIC).all()
+
+
+def test_build_dataset_drops_same_gpu_negative_inside_horizon(tmp_path):
+    # Navigator repro (bug 2): with neg_offset_s < horizon_s the same-GPU
+    # pre-event negative falls INSIDE the positive horizon. It must be dropped
+    # (leakage guard), not emitted at all. Onset at i=6 (90s); horizon=60 ->
+    # positive t_ref at i=2 (30s); neg_offset=30 -> same-GPU negative at i=4
+    # (60s), which lies in the positive horizon (30s, 90s].
+    sources = _telemetry_csvs(tmp_path)  # A=n1-0 faults at i=6; n1-1 never faults
+    rows = build_dataset(
+        sources,
+        horizons_s=[60],
+        lookback_s=30,
+        neg_offset_s=30,
+        control_gpus=["n1#1"],   # a real, surviving negative for class balance
+        sample_period_s=15,
+    )
+    refs = {(r["gpu"], datetime.fromisoformat(r["t_ref"])) for r in rows}
+
+    # The leaked same-GPU negative at i=4 must be absent entirely.
+    assert ("n1#0", _t(4)) not in refs
+    # The positive at i=2 survives with label 1.
+    pos = [r for r in rows if r["gpu"] == "n1#0" and r["label"] == 1]
+    assert pos and datetime.fromisoformat(pos[0]["t_ref"]) == _t(2)
+    # The control GPU yields a true negative at the positive ref (both classes).
+    assert any(r["gpu"] == "n1#1" and r["label"] == 0 for r in rows)
+    # Invariant: every emitted label matches the onset truth.
+    onset_t = _t(6)
+    for r in rows:
+        t_ref = datetime.fromisoformat(r["t_ref"])
+        within = (r["gpu"] == "n1#0") and (t_ref < onset_t <= t_ref + timedelta(seconds=60))
+        assert int(r["label"]) == int(within)
 
 
 def test_write_dataset_csv_roundtrip(tmp_path):

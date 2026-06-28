@@ -21,20 +21,24 @@ and are tested independently —
 * streaming wide->long reads: ``gpusitter.telemetry`` streams one row at a time
   and never materializes the full frame; ``TelemetryStore.load(..., gpus=...)``
   keeps only the sampled GPUs' cells, bounding memory to the sample set.
-
-Label semantics follow the parent lys design: onsets are 0/idle -> nonzero Xid
-transitions (XID_ERRORS is a latched gauge, so a sustained nonzero counts once);
-a GPU already nonzero on its first observation is left-censored and excluded.
+* onset detection: ``gpusitter.rca.job_join.stream_xid_onsets`` — the
+  nav-approved empty-aware edge detector. Onsets are non-fault -> fault edges
+  where the prior OBSERVED state was healthy (0.0) OR idle (empty cell); reading
+  the raw CSV (not the empty-skipping long path) is essential because many kalos
+  GPUs go idle -> fault without ever recording a 0.0. Latched faults
+  (nonzero -> nonzero) and a GPU already nonzero on first observation
+  (left-censored) are excluded.
 """
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from datetime import datetime, timedelta
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 import numpy as np
 
-from ..telemetry.ingest import iter_long_records
+from ..rca.job_join import stream_xid_onsets
 from ..telemetry.normalize import GpuId
 from ..telemetry.store import TelemetryStore
 
@@ -54,37 +58,68 @@ _META_COLS = ("gpu", "node", "gpu_idx", "t_ref", "event_source",
 
 
 class OnsetEvent(NamedTuple):
-    """An observed 0/idle -> nonzero Xid transition on one GPU."""
+    """An observed non-fault -> nonzero Xid transition on one GPU."""
 
     gpu: GpuId
     t: datetime
 
 
-def xid_onsets(path: str, *, alias: Optional[Mapping[str, str]] = None) -> List[OnsetEvent]:
-    """Stream XID_ERRORS and emit one event per 0/idle -> nonzero transition.
+def xid_onsets(path: str) -> List[OnsetEvent]:
+    """Empty-aware Xid onsets from a wide XID_ERRORS CSV.
 
-    Rows are time-ordered (verified on the droplet), so per-GPU records arrive in
-    time order. Empty cells are skipped by the streaming reader (idle GPU), so a
-    transition is observed as ``prev == 0 -> value != 0``. A GPU whose *first*
-    observation is already nonzero is left-censored and never produces an onset.
+    Delegates to the nav-approved ``stream_xid_onsets`` (rca.job_join) so the
+    onset semantics are defined in exactly one place: an onset is a transition
+    into a fault whose prior observed state was healthy (0.0) or idle (empty
+    cell). Crucially this catches idle(empty) -> fault transitions that the
+    empty-skipping long-record reader would miss.
     """
-    prev: Dict[str, float] = {}
-    onsets: List[OnsetEvent] = []
-    for rec in iter_long_records(path, XID_METRIC, alias=alias):
-        key = rec.gpu.canonical
-        last = prev.get(key)
-        if last is None:
-            # First observation: a nonzero here is left-censored (we never saw
-            # the transition), so it is not an onset.
-            prev[key] = rec.value
-            continue
-        if last == 0.0 and rec.value != 0.0:
-            onsets.append(OnsetEvent(gpu=rec.gpu, t=_parse_iso(rec.t)))
-        prev[key] = rec.value
-    return onsets
+    return [OnsetEvent(gpu=_parse_canonical(canonical), t=t)
+            for t, canonical in stream_xid_onsets(path)]
 
 
 # --- Windowed features (pre-reference; missingness explicit) -----------------
+
+
+def _window_from_arrays(
+    times: Sequence[datetime],
+    values: Sequence[float],
+    t_ref: datetime,
+    lookback_s: float,
+    sample_period_s: float = 15.0,
+) -> Dict[str, float]:
+    """Aggregate ``[t_ref - lookback, t_ref]`` from time-sorted parallel arrays.
+
+    ``times`` must be ascending; the window is located with two binary searches
+    (O(log n) + window size), not a full per-call scan. Future leakage is
+    impossible (upper bound is ``t_ref``). An empty window returns NaN stats with
+    ``present = 0`` / ``coverage = 0`` — never zero-filled, since 0 is a
+    meaningful telemetry value.
+    """
+    lo = t_ref - timedelta(seconds=lookback_s)
+    i = bisect_left(times, lo)
+    j = bisect_right(times, t_ref)
+    expected = lookback_s / sample_period_s + 1.0 if sample_period_s > 0 else 0.0
+    if j <= i:
+        nan = float("nan")
+        return {"count": 0, "coverage": 0.0, "present": 0, "mean": nan,
+                "std": nan, "min": nan, "max": nan, "last": nan,
+                "delta": nan, "slope": nan}
+    vals = np.array(values[i:j], dtype="float64")
+    secs = np.array([(times[k] - t_ref).total_seconds() for k in range(i, j)],
+                    dtype="float64")
+    slope = float(np.polyfit(secs, vals, 1)[0]) if len(vals) >= 2 else float("nan")
+    return {
+        "count": int(len(vals)),
+        "coverage": float(len(vals) / expected) if expected > 0 else 0.0,
+        "present": 1,
+        "mean": float(vals.mean()),
+        "std": float(vals.std()),
+        "min": float(vals.min()),
+        "max": float(vals.max()),
+        "last": float(vals[-1]),
+        "delta": float(vals[-1] - vals[0]),
+        "slope": slope,
+    }
 
 
 def window_features(
@@ -94,38 +129,17 @@ def window_features(
     *,
     sample_period_s: float = 15.0,
 ) -> Dict[str, float]:
-    """Aggregate one metric over ``[t_ref - lookback, t_ref]`` (inclusive).
+    """Convenience wrapper over :func:`_window_from_arrays` taking ``[(t, v)]``.
 
-    ``series`` is the full sorted ``[(t, value)]`` for one GPU/metric; only
-    samples in the lookback window and at or before ``t_ref`` are used (future
-    leakage is impossible). An empty window returns NaN stats with
-    ``present = 0`` and ``coverage = 0`` — never zero-filled, because 0 is a
-    meaningful telemetry value.
+    Sorts defensively, then delegates to the binary-search core; used by tests
+    and any caller without pre-split arrays. ``build_dataset`` calls the array
+    core directly off a cache to keep the hot path O(log n) per candidate.
     """
-    lo = t_ref - timedelta(seconds=lookback_s)
-    win = [(t, v) for t, v in series if lo <= t <= t_ref]
-    expected = lookback_s / sample_period_s + 1.0 if sample_period_s > 0 else 0.0
-    if not win:
-        nan = float("nan")
-        return {"count": 0, "coverage": 0.0, "present": 0, "mean": nan,
-                "std": nan, "min": nan, "max": nan, "last": nan,
-                "delta": nan, "slope": nan}
-    win.sort(key=lambda kv: kv[0])
-    values = np.array([v for _, v in win], dtype="float64")
-    secs = np.array([(t - t_ref).total_seconds() for t, _ in win], dtype="float64")
-    slope = float(np.polyfit(secs, values, 1)[0]) if len(values) >= 2 else float("nan")
-    return {
-        "count": int(len(values)),
-        "coverage": float(len(values) / expected) if expected > 0 else 0.0,
-        "present": 1,
-        "mean": float(values.mean()),
-        "std": float(values.std()),
-        "min": float(values.min()),
-        "max": float(values.max()),
-        "last": float(values[-1]),
-        "delta": float(values[-1] - values[0]),
-        "slope": slope,
-    }
+    pairs = sorted(series, key=lambda kv: kv[0])
+    times = [t for t, _ in pairs]
+    values = [v for _, v in pairs]
+    return _window_from_arrays(times, values, t_ref, lookback_s,
+                               sample_period_s=sample_period_s)
 
 
 # --- Dataset assembly --------------------------------------------------------
@@ -147,13 +161,13 @@ def _label(gpu_canonical: str, t_ref: datetime, horizon_s: float,
     return int(any(t_ref < t <= hi for t in onsets_by_gpu.get(gpu_canonical, ())))
 
 
-def _parse_series_cache(store: TelemetryStore, metric: str, gpu: str,
-                        cache: Dict[Tuple[str, str], List[Tuple[datetime, float]]]):
+def _series_arrays(store: TelemetryStore, metric: str, gpu: str,
+                   cache: Dict[Tuple[str, str], Tuple[List[datetime], List[float]]]):
     key = (metric, gpu)
     if key not in cache:
-        parsed = [(_parse_iso(t), v) for t, v in store.series(metric, gpu)]
-        parsed.sort(key=lambda kv: kv[0])
-        cache[key] = parsed
+        pairs = sorted(((_parse_iso(t), v) for t, v in store.series(metric, gpu)),
+                       key=lambda kv: kv[0])
+        cache[key] = ([t for t, _ in pairs], [v for _, v in pairs])
     return cache[key]
 
 
@@ -168,8 +182,9 @@ def _row(gpu: GpuId, t_ref: datetime, horizon_s: float, lookback_s: float,
     }
     any_present = False
     for metric in feature_metrics:
-        series = _parse_series_cache(store, metric, gpu.canonical, cache)
-        feats = window_features(series, t_ref, lookback_s, sample_period_s=sample_period_s)
+        times, values = _series_arrays(store, metric, gpu.canonical, cache)
+        feats = _window_from_arrays(times, values, t_ref, lookback_s,
+                                    sample_period_s=sample_period_s)
         any_present = any_present or bool(feats["present"])
         for stat in _STATS:
             row[f"{metric}_{stat}"] = feats[stat]
@@ -194,43 +209,57 @@ def build_dataset(
 
     For each horizon H: a positive at ``t_event - H`` per onset; a same-GPU
     pre-event control at ``t_event - neg_offset``; and, for each ``control_gpus``
-    id, a time-matched control at every positive ``t_ref``. Every candidate's
-    label is computed honestly from the onset set, so a negative that would fall
-    inside a positive horizon is dropped (the leakage guard) rather than
-    mislabeled. Rows with no telemetry coverage in any feature metric are dropped.
+    id, a time-matched control at every positive ``t_ref``. **Leakage guard:** a
+    negative candidate is *dropped* (not emitted) if an onset for that GPU falls
+    inside its horizon — so the negative pool contains only true negatives, even
+    when ``neg_offset_s < horizon_s``. Rows with no telemetry coverage in any
+    feature metric are dropped. ``alias`` normalizes foreign GPU namespaces for
+    the feature store (onsets use the IP-named XID file directly).
     """
     if XID_METRIC not in sources:
         raise ValueError(f"sources must include {XID_METRIC!r} to derive labels")
     feature_metrics = [m for m in sources if m != XID_METRIC]
     control_gpus = list(control_gpus or [])
 
-    onsets = xid_onsets(sources[XID_METRIC], alias=alias)
+    onsets = xid_onsets(sources[XID_METRIC])
     onsets_by_gpu = _onsets_by_gpu(onsets)
     gpu_by_canonical = {o.gpu.canonical: o.gpu for o in onsets}
 
-    # Candidate reference points: (GpuId, t_ref, horizon_s). De-duplicated so the
-    # same (gpu, t_ref, H) is never emitted twice.
-    candidates: Dict[Tuple[str, datetime, float], GpuId] = {}
+    # Positives: keyed (canonical, t_ref, horizon) -> GpuId. A positive's label
+    # is 1 by construction (the onset sits at t_ref + H).
+    positives: Dict[Tuple[str, datetime, float], GpuId] = {}
+    # Negative candidates, kept only if they are true negatives (leakage guard).
+    negatives: Dict[Tuple[str, datetime, float], GpuId] = {}
+
     for h in horizons_s:
         positive_refs: List[datetime] = []
         for o in onsets:
-            t_pos = o.t - timedelta(seconds=h)
-            candidates[(o.gpu.canonical, t_pos, h)] = o.gpu
-            positive_refs.append(t_pos)
-            t_neg = o.t - timedelta(seconds=neg_offset_s)
-            candidates[(o.gpu.canonical, t_neg, h)] = o.gpu
+            positives[(o.gpu.canonical, o.t - timedelta(seconds=h), h)] = o.gpu
+            positive_refs.append(o.t - timedelta(seconds=h))
+        for o in onsets:
+            key = (o.gpu.canonical, o.t - timedelta(seconds=neg_offset_s), h)
+            if key in positives:
+                continue
+            if _label(key[0], key[1], key[2], onsets_by_gpu) == 0:
+                negatives[key] = o.gpu
         for cg in control_gpus:
             gpu = gpu_by_canonical.get(cg) or _parse_canonical(cg)
             for t_ref in positive_refs:
-                candidates[(cg, t_ref, h)] = gpu
+                key = (cg, t_ref, h)
+                if key in positives or key in negatives:
+                    continue
+                if _label(key[0], key[1], key[2], onsets_by_gpu) == 0:
+                    negatives[key] = gpu
 
+    candidates: Dict[Tuple[str, datetime, float], GpuId] = {**positives, **negatives}
     sample_gpus = sorted({c[0] for c in candidates})
     feature_sources = {m: sources[m] for m in feature_metrics}
     store = TelemetryStore.load(feature_sources, gpus=sample_gpus, alias=alias)
 
-    cache: Dict[Tuple[str, str], List[Tuple[datetime, float]]] = {}
+    cache: Dict[Tuple[str, str], Tuple[List[datetime], List[float]]] = {}
     rows: List[dict] = []
-    for (canonical, t_ref, h), gpu in sorted(candidates.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
+    for (canonical, t_ref, h), gpu in sorted(candidates.items(),
+                                             key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
         label = _label(canonical, t_ref, h, onsets_by_gpu)
         row, any_present = _row(gpu, t_ref, h, lookback_s, label, feature_metrics,
                                 store, cache, sample_period_s)
