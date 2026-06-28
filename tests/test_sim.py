@@ -316,8 +316,24 @@ def test_predict_gpu_scores_real_telemetry_window():
         assert name in feats
     # MEMORY_TEMP is an honest proxy for GPU_TEMP (no memory series exists).
     assert feats["MEMORY_TEMP_last"] == feats["GPU_TEMP_last"]
+    # Slope must be in training units (degrees per SECOND, ~±0.05). Computing it
+    # per sample-index instead inflates it ~15x and saturates predict_proba to 0.
+    assert abs(feats["GPU_TEMP_slope"]) < 1.0
     assert body["label"] in {"alert", "watch", "ok"}
     assert body["note"]
+
+
+def test_predict_gpu_slope_is_per_second_not_per_index():
+    """Regression: a hot, rising GPU must not score ~0 from a slope-unit bug.
+
+    INC-009 (Xid 94) climbs from ~62C to ~74C over the window. With the slope
+    computed per sample-index the model saturated to ~2e-7; per-second it lands
+    in a sane mid-range.
+    """
+    body = client.post("/api/predict-gpu", json={"incident_id": "INC-009"}).json()
+    assert body["available"] is True
+    assert abs(body["features"]["GPU_TEMP_slope"]) < 0.5  # per-second, small
+    assert body["likelihood"] > 0.01  # not saturated to zero
 
 
 def test_predict_gpu_unknown_incident_is_unavailable():

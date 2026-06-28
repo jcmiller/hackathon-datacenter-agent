@@ -329,22 +329,32 @@ def _telemetry_window(incident_id: str) -> dict | None:
         return json.load(f)
 
 
-def _series_values(series: dict, key: str) -> list[float]:
-    """Non-null values of a telemetry series (Point = [t, value|null])."""
-    return [v for _t, v in series.get(key, []) if v is not None]
+def _series_points(series: dict, key: str) -> list[tuple[str, float]]:
+    """Non-null (timestamp, value) pairs of a telemetry series (Point = [t, value|null])."""
+    return [(t, v) for t, v in series.get(key, []) if v is not None]
 
 
 def _derive_features(series: dict) -> dict[str, float]:
     """Map each feature name the card may ask for to its window-derived value."""
     import numpy as np
 
-    temp = _series_values(series, "temp")
-    power = _series_values(series, "power")
+    temp_pts = _series_points(series, "temp")
+    temp = [v for _t, v in temp_pts]
+    power = [v for _t, v in _series_points(series, "power")]
     gpu_temp_last = temp[-1]
+
+    # Slope must be in the SAME units the model was trained on — degrees per
+    # SECOND, computed over the real timestamps. Using the sample index instead
+    # inflates the slope by the sample spacing (~15 s), which the scaler turns
+    # into an enormous z-score and saturates predict_proba to ~0.
+    t0 = datetime.fromisoformat(temp_pts[0][0])
+    secs = [(datetime.fromisoformat(t) - t0).total_seconds() for t, _ in temp_pts]
+    slope = float(np.polyfit(secs, temp, 1)[0]) if len(secs) > 1 else 0.0
+
     return {
         "GPU_TEMP_last": gpu_temp_last,
         "GPU_TEMP_mean": float(np.mean(temp)),
-        "GPU_TEMP_slope": float(np.polyfit(range(len(temp)), temp, 1)[0]),
+        "GPU_TEMP_slope": slope,
         "POWER_USAGE_last": power[-1],
         # No memory_temp series exists; GPU_TEMP is a strongly-correlated proxy.
         "MEMORY_TEMP_last": gpu_temp_last,
