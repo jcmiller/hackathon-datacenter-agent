@@ -113,19 +113,21 @@ def xid_onset_events(store) -> List[Tuple[datetime, str]]:
     return events
 
 
-def stream_xid_onsets(xid_csv: str) -> List[Tuple[datetime, str]]:
-    """Edge-detected Xid onsets streamed straight from a wide XID CSV.
+def stream_xid_onset_records(xid_csv: str) -> List[Tuple[datetime, str, float]]:
+    """Edge-detected Xid onsets streamed from a wide XID CSV, WITH the fault code.
 
-    Empty-aware and memory-bounded (one row + one per-GPU state at a time), so it
-    scales to the full ~750 MB kalos XID file. An onset is a transition INTO a
-    fault: the sample at t is nonzero and the GPU's prior OBSERVED state was
-    non-fault — either healthy (0.0) or idle (empty cell). Excluded:
+    Same empty-aware, memory-bounded edge detection as :func:`stream_xid_onsets`
+    (one row + one per-GPU state at a time, scaling to the full ~750 MB kalos XID
+    file), but each event also carries the observed Xid CODE at onset — the
+    diagnosable signal the runtime RCA tools surface. An onset is a transition
+    INTO a fault: the sample at t is nonzero and the GPU's prior OBSERVED state
+    was non-fault (healthy 0.0 or idle empty cell). Excluded:
     - latched faults (nonzero -> nonzero), the dominant kalos pattern;
     - a GPU whose very first observation is already nonzero (pre-trace history
       unknown — could have faulted before the window).
-    Reading raw (not via the empty-skipping long-record path) is essential:
-    many kalos GPUs go idle->fault without ever recording a 0.0, so dropping
-    empties would lose those real onsets.
+    Reading raw (not via the empty-skipping long-record path) is essential: many
+    kalos GPUs go idle->fault without ever recording a 0.0, so dropping empties
+    would lose those real onsets.
     """
     import csv as _csv
 
@@ -150,12 +152,23 @@ def stream_xid_onsets(xid_csv: str) -> List[Tuple[datetime, str]]:
                     if prev == 0.0 or prev == "idle":  # non-fault -> fault
                         if t is None:
                             t = _parse(row[0])
-                        events.append((t, gpus[i]))
+                        events.append((t, gpus[i], v))
                     state[i] = v
                 else:
                     state[i] = 0.0
     events.sort(key=lambda e: e[0])
     return events
+
+
+def stream_xid_onsets(xid_csv: str) -> List[Tuple[datetime, str]]:
+    """Edge-detected Xid onsets streamed from a wide XID CSV as ``(datetime, gpu)``.
+
+    Projection of :func:`stream_xid_onset_records` that drops the fault code;
+    kept as the stable contract for callers that only need onset timing/location
+    (e.g. the coincidence denominator). See that function for the edge-detection
+    semantics (empty-aware, latched-fault and first-sample exclusions).
+    """
+    return [(t, gpu) for (t, gpu, _code) in stream_xid_onset_records(xid_csv)]
 
 
 def xid_sample_span(xid_csv: str) -> Optional[Tuple[datetime, datetime]]:

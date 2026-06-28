@@ -23,9 +23,12 @@ def window_stats(path: str, start, end) -> dict:
     ``end`` must be the same kind (use :func:`window_bounds`). A present-but-
     unparseable Time raises — never silently skipped — so real-data windows can't
     quietly return samples:0.
+
+    Only wide ``Time`` + GPU-column CSVs are handled. Non-time-series artifacts
+    (e.g. a ``.pkl`` CDF) are rejected upstream by
+    :func:`gpusitter.telemetry.sources.validate_timeseries_csv` before reaching
+    here, so there is no pickle branch.
     """
-    if path.endswith(".pkl"):
-        return _pickle_window_stats(path, start, end)
     rows = n = 0
     total = 0.0
     mx = mn = None
@@ -53,22 +56,3 @@ def window_stats(path: str, start, end) -> dict:
     if n == 0:
         return _empty()
     return {"samples": rows, "mean": total / n, "max": mx, "min": mn}
-
-
-def _pickle_window_stats(path, start, end):
-    # SECURITY: read_pickle executes arbitrary code — only load .pkl from the
-    # trusted InternLM/AcmeTrace release. Prefer CSV when both exist.
-    import pandas as pd
-
-    df = pd.read_pickle(path)
-    win = df[(df["Time"] >= start) & (df["Time"] <= end)]
-    cols = [c for c in win.columns if c != "Time"]
-    vals = win[cols].to_numpy().ravel()
-    if vals.size == 0:
-        return _empty()
-    return {
-        "samples": len(win),
-        "mean": float(vals.mean()),
-        "max": float(vals.max()),
-        "min": float(vals.min()),
-    }
