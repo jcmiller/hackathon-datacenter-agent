@@ -5,7 +5,7 @@ Source: droplet exploration, embead bead `vf8`.
 
 ## Source & access
 - Droplet `134.199.208.214`: `/root/hackathon-datacenter-agent/data/acme-util` (Acme HF dataset `Qinghao/AcmeTrace`).
-- kalos subset checked out (~6.5 GB); **seren ~70 GB stays as LFS pointers** (won't fit free disk). Materialize via `git lfs checkout <path>`.
+- **Access (team standard):** read LFS files directly from the `.git/lfs` cache via `scripts/lfs_helper.py` (`get_lfs_cache_path`) — 0 extra disk, no checkout; see `docs/TEAM_GUIDE.md`. (A ~6.5 GB kalos subset was also checked out during exploration; seren ~70 GB stays cache-only.)
 - Real **DCGM** wide CSVs: `Time × ~2,344 GPUs`, **78,843 timestamps @ ~15 s**, Aug 2023. GPU id = `<node>-<gpuidx>`; empty cell = idle.
 - Metrics: `GPU_TEMP`, `GPU_UTIL`, `POWER_USAGE`, `MEMORY_TEMP`, `MEM_CLOCK`, `SM_ACTIVE`/`SM_OCCUPANCY`, `FB_USED`/`FREE`, `DRAM_ACTIVE`, `PIPE_TENSOR_ACTIVE`, `NODE_*`, `XID_ERRORS` + IPMI power.
 
