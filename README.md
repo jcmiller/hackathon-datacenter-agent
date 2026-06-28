@@ -92,6 +92,38 @@ The 80 GB AcmeTrace telemetry lives on the droplet. The app reads telemetry CSVs
 
 > ⚠️ **AcmeTrace reality check**: job failures and 15 s telemetry overlap only ~1.5 days; Kalos has no `NODE_FAIL` — incident = `FAILED` + non-null `fail_time`; timestamps are ISO UTC strings; `util_pkl/*.pkl` are CDF distributions not time series; real Xid codes in `XID_ERRORS.csv`.
 
+## Deployment
+
+> **No CI/CD is configured.** Deploy is manual — push to `main` then SSH in and pull.
+
+**Server:** `134.199.208.214` (DigitalOcean SFO3, Ubuntu 24.04, 2 vCPU / 16 GB RAM)
+
+```bash
+# 1. SSH into the droplet
+ssh root@134.199.208.214
+
+# 2. Pull latest main
+cd /root/hackathon-datacenter-agent
+git pull origin main
+
+# 3. (If Python deps changed) reinstall
+pip install -e .
+
+# 4. (If dashboard changed) rebuild the React app locally first, then copy built output:
+#    Local: cd dashboard && npm run build
+#    Local: scp -r dashboard/dist/* root@134.199.208.214:/root/hackathon-datacenter-agent/src/gpusitter/app/dashboard/
+
+# 5. Restart the server
+pkill -f uvicorn || true
+nohup env PYTHONPATH=src GOOGLE_API_KEY="$(cat .env | grep GOOGLE_API_KEY | cut -d= -f2)" \
+  uvicorn gpusitter.app.sim:app --host 0.0.0.0 --port 8000 \
+  > /tmp/uvicorn.log 2>&1 &
+disown
+```
+
+The `GOOGLE_API_KEY` is stored in `/root/hackathon-datacenter-agent/.env` on the droplet (not committed).  
+Logs: `tail -f /tmp/uvicorn.log`
+
 ## Infrastructure
 
 - **Droplet:** `134.199.208.214`, 2 vCPU / 16 GB RAM / 290 GB disk, SFO3, Ubuntu 24.04
