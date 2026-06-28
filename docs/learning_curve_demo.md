@@ -74,3 +74,26 @@ exists (e.g. the droplet) with `--data`.
 uv run python scripts/learning_curve_demo.py            # synthetic, writes docs/learning_curve.json
 uv run python scripts/learning_curve_demo.py --data data/early_detection.csv   # real Kalos data
 ```
+
+## One model surface: `/api/model` is canonical from the registry (bead aow)
+
+The demo must show a single, honest self-improvement story. There are two model
+codepaths and they are deliberately reconciled, not merged:
+
+- **Rigorous (canonical).** `gpusitter.detection.harness.ModelRegistry` — the
+  keep-if-better incumbent behind every guard above. `/api/model` serves this
+  incumbent's card whenever a registry exists, and it is the **same** model
+  `/api/monitor` scores per-row. Card and operational scores agree because they are
+  one model; `/api/model` reports `source="registry"`, `rigorous=true`, and a
+  `version` equal to `/api/monitor`'s `model_version`.
+- **Provisional (fallback only).** `gpusitter.detection.classifier` is the live triage
+  agent's fast in-process fit (`maybe_promote` on `val_auc > incumbent` alone — no
+  leakage probe, no holdout-identity guard, no time-split). `/api/model` returns it
+  only when no registry is present, badged `source="in_process"`, `rigorous=false`, so
+  it can never be mistaken for the keep-if-better incumbent.
+
+**Model-type menu divergence is intentional.** The triage `classifier` menu is
+`logreg`/`tree`/`gboost` (fast in-process triage fits); the rigorous harness menu is
+`logreg`/`hgb`, deliberately matched to the lys offline eval models so the harness AUC
+equals the standalone early-detection eval report. The canonical headline menu is the
+harness's `logreg`/`hgb`.

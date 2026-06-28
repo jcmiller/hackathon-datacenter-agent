@@ -202,7 +202,10 @@ def test_triage_stream_yields_events(monkeypatch):
     assert "disposition" in types
 
 
-def test_model_endpoint_reflects_incumbent():
+def test_model_endpoint_provisional_fallback(tmp_path, monkeypatch):
+    """With no rigorous registry, the in-process triage fit surfaces — but badged
+    provisional so it cannot be mistaken for the keep-if-better incumbent (AC#2/#4)."""
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(tmp_path / "empty_reg"))
     clf.reset()
     clf.maybe_promote(None, "logreg", ["power_spike_ratio"], 0.87, n_samples=5)
     r = client.get("/api/model")
@@ -210,6 +213,48 @@ def test_model_endpoint_reflects_incumbent():
     body = r.json()
     assert body["model"]["version"] == 1
     assert body["model"]["model_type"] == "logreg"
+    # Provenance: explicitly NOT the rigorous registry.
+    assert body["source"] == "in_process"
+    assert body["rigorous"] is False
+    assert "registry" in body["note"]
+    clf.reset()
+
+
+def test_model_endpoint_serves_registry_incumbent(tmp_path, monkeypatch):
+    """The canonical /api/model card is the rigorous registry incumbent — the SAME
+    model /api/monitor scores — not the weak maybe_promote number (AC#1/#2/#4)."""
+    from gpusitter.detection.harness import CandidateSpec, ModelRegistry, run_round
+
+    df = _monitor_feature_df()
+    data = tmp_path / "early_detection.csv"
+    df.to_csv(data, index=False)
+    reg_dir = tmp_path / "reg"
+    reg = ModelRegistry(str(reg_dir))
+    _, result = run_round(CandidateSpec("logreg", ("temp_last",)), df, reg, dataset_path=str(data))
+    assert reg.incumbent is not None, "fixture must promote a usable incumbent"
+
+    monkeypatch.setattr(sim, "MONITOR_REGISTRY_PATH", str(reg_dir))
+    monkeypatch.setattr(sim, "MONITOR_DATA_PATH", str(data))
+
+    # A stale, contradictory in-process fit must NOT win over the registry.
+    clf.reset()
+    clf.maybe_promote(None, "tree", ["power_spike_ratio"], 0.99, n_samples=5)
+
+    body = client.get("/api/model").json()
+    assert body["source"] == "registry"
+    assert body["rigorous"] is True
+    card = body["model"]
+    assert card["primary_metric"] == "roc_auc"
+    # Canonical, not the weak path: registry AUC, registry model_type, registry version.
+    assert card["val_auc"] == round(result.candidate_value, 3)
+    assert card["model_type"] == "logreg"
+    assert card["model_type"] != "tree"
+    assert card["holdout_id"]
+
+    # Unified identity: /api/model and /api/monitor report the same model version.
+    mon = client.get("/api/monitor").json()
+    assert mon["available"] is True
+    assert card["version"] == mon["model_version"]
     clf.reset()
 
 

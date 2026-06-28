@@ -112,22 +112,94 @@ async def do_triage(incident: dict):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+def _registry_model_card(card) -> dict:
+    """Render a rigorous registry ModelCard as the canonical dashboard model card.
+
+    This is the SAME incumbent ``/api/monitor`` scores from, so the headline metric
+    here (held-out ROC-AUC behind the strict time-split + permutation baseline + dual
+    leakage probes + holdout-identity pin) and the per-row operational scores there are
+    one model, not two contradictory stories (bead aow).
+    """
+    primary_is_auc = card.primary_metric == "roc_auc"
+    return {
+        "model": {
+            "version": card.version,
+            "model_type": card.model_type,
+            "features": list(card.features),
+            # Back-compat field the React bundle reads; only meaningful when the
+            # primary metric is ROC-AUC (it is, by default).
+            "val_auc": round(card.primary_value, 3) if primary_is_auc else None,
+            "primary_metric": card.primary_metric,
+            "primary_value": round(card.primary_value, 4),
+            "n_samples": card.n_train + card.n_test,
+            "n_train": card.n_train,
+            "n_test": card.n_test,
+            "holdout_id": (card.holdout_id or "")[:12],
+            "training_window": list(card.training_window),
+        },
+        "source": "registry",
+        "rigorous": True,
+    }
+
+
+def _provisional_model_card(model: dict) -> dict:
+    """Wrap the weak in-process triage card, explicitly badged as NOT canonical.
+
+    The live triage agent's ``classifier.INCUMBENT`` (promoted by ``maybe_promote`` on
+    ``val_auc > incumbent`` alone — no leakage probe, no holdout-identity guard, no
+    time-split) is a fast in-process fit, never the self-improvement headline. It
+    surfaces only when no rigorous registry exists (e.g. before bead jds ships the
+    prebuilt registry) and is flagged so the dashboard cannot mistake it for the
+    keep-if-better registry incumbent (bead aow, AC#2/#4).
+    """
+    return {
+        "model": model,
+        "source": "in_process",
+        "rigorous": False,
+        "note": (
+            "provisional in-process triage fit (maybe_promote, no leakage/holdout "
+            "guards) — not the rigorous keep-if-better registry incumbent"
+        ),
+    }
+
+
 @app.get("/api/model")
 def get_model():
+    """Canonical model card for the dashboard.
+
+    Source of truth is the rigorous keep-if-better ``ModelRegistry`` (bead glf,
+    detection/harness.py): strict time-ordered split, 8x permutation baseline, dual
+    leakage probes, holdout-identity pin. When a registry incumbent exists it is the
+    canonical, honest self-improvement surface and is the SAME model ``/api/monitor``
+    scores (bead aow). The legacy in-process ``classifier`` path is a provisional
+    fallback, explicitly badged.
+
+    Model-type menu divergence is intentional: the live triage ``classifier`` offers
+    logreg/tree/gboost for fast in-process fits, while the rigorous harness offers
+    logreg/hgb deliberately matched to the lys offline eval models so harness AUC
+    equals the standalone eval report. The canonical headline menu is logreg/hgb.
+    """
+    # lazy import: avoids pulling pandas/sklearn-heavy harness at module load time
+    from ..detection.harness import ModelRegistry
+
+    registry = ModelRegistry(MONITOR_REGISTRY_PATH)
+    if registry.incumbent is not None:
+        return _registry_model_card(registry.incumbent)
+
     m = classifier.INCUMBENT
     if m is not None:
-        return {
-            "model": {
+        return _provisional_model_card(
+            {
                 "version": m.version,
                 "model_type": m.model_type,
                 "features": m.features,
                 "val_auc": round(m.auc, 3) if m.auc else None,
                 "n_samples": m.n_samples,
             }
-        }
+        )
     state = classifier.load_state(MODEL_STATE_PATH)
     if state:
-        return {"model": state}
+        return _provisional_model_card(state)
     return {"model": None, "message": "not yet trained — need ≥1 incident with metrics"}
 
 

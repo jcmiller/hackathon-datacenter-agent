@@ -57,6 +57,25 @@ export interface ModelCard {
   features: string[];
   val_auc: number | null;
   n_samples: number;
+  // Provenance + rigorous metrics, present when /api/model serves the canonical
+  // keep-if-better registry incumbent (bead aow). The same model /api/monitor scores:
+  // model.version === monitor.model_version. Absent on the provisional in-process card.
+  primary_metric?: string;
+  primary_value?: number;
+  n_train?: number;
+  n_test?: number;
+  holdout_id?: string;
+  training_window?: [string, string];
+}
+
+// /api/model envelope. `source` distinguishes the canonical registry incumbent from
+// the provisional in-process triage fit; `rigorous` is true only for the former.
+export interface ModelResponse {
+  model: ModelCard | null;
+  source?: "registry" | "in_process";
+  rigorous?: boolean;
+  note?: string;
+  message?: string;
 }
 
 // Agent reasoning stream events
