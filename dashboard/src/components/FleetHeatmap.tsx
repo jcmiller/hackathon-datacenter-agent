@@ -61,7 +61,11 @@ export function FleetHeatmap({
             idle
           </span>
           {fleet && (
-            <span className="faint mono-num">{fleet.ts.slice(11, 19)}</span>
+            // Not a live clock — the fixture captures a single cascade instant,
+            // so label it as the snapshot time rather than implying it ticks.
+            <span className="faint mono-num" title={`fleet snapshot — ${fleet.ts}`}>
+              as of {fleet.ts.slice(11, 19)}
+            </span>
           )}
         </span>
       </div>

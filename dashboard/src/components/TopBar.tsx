@@ -20,6 +20,13 @@ export function TopBar({
   onComputerUse?: () => void;
 }) {
   const active = incidents.filter((i) => i.state === "triaging").length;
+  // Derive nodes-hit from the current faulted cells so it stays consistent with
+  // the live "faulted" count instead of a static fixture total.
+  const nodesHit = fleet
+    ? new Set(
+        fleet.cells.filter((c) => c.status === "fault").map((c) => c.node),
+      ).size
+    : null;
   return (
     <header className="panel topbar">
       <div className="brand" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -91,9 +98,8 @@ export function TopBar({
           l="faulted"
           cls="crit"
         />
-        <Kpi v={meta ? String(meta.nodesAffected) : "—"} l="nodes hit" cls="warn" />
+        <Kpi v={nodesHit != null ? String(nodesHit) : "—"} l="nodes hit" cls="warn" />
         <Kpi v={String(active)} l="triaging" cls="accent" />
-        <Kpi v="4m" l="MTTR" />
       </div>
     </header>
   );

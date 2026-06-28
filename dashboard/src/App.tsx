@@ -4,7 +4,6 @@ import type {
   Incident,
   Meta,
   TelemetryWindow,
-  Point,
 } from "./types";
 import {
   loadFleet,
@@ -100,8 +99,10 @@ export function App() {
     loadTelemetry(selectedId).then(setTele).catch(() => setTele(null));
   }, [selectedId]);
 
-  // clicking a heatmap cell selects its incident if one exists for that GPU,
-  // or generates clean telemetry if it is healthy/idle.
+  // clicking a heatmap cell selects its incident if one exists for that GPU.
+  // For a healthy/idle GPU we highlight the cell but don't fabricate a telemetry
+  // window — real per-GPU DCGM history comes from the backend; until there's an
+  // incident for this GPU the telemetry strip stays in its empty state.
   const selectGpu = (gid: string) => {
     setSelectedGpuId(gid);
     const match = incidents.find((i) => `${i.gpu.node}-${i.gpu.idx}` === gid);
@@ -109,31 +110,7 @@ export function App() {
       setSelectedId(match.id);
     } else {
       setSelectedId(null);
-      // Generate realistic telemetry metrics dynamically for this healthy/idle GPU!
-      const cell = fleet?.cells.find((c) => `${c.node}-${c.idx}` === gid);
-      const isIdle = cell?.status === "idle";
-      
-      const now = new Date();
-      const series = { temp: [] as Point[], power: [] as Point[], util: [] as Point[] };
-      // Generate 20 points of history
-      for (let i = 0; i < 20; i++) {
-        const timeStr = new Date(now.getTime() - (20 - i) * 10000).toISOString();
-        const rand = Math.random();
-        
-        const u = isIdle ? 0 : Math.round(75 + rand * 20);
-        const t = isIdle ? Math.round(32 + rand * 3) : Math.round(62 + rand * 12);
-        const p = isIdle ? Math.round(68 + rand * 8) : Math.round(240 + rand * 80);
-        
-        series.util.push([timeStr, u]);
-        series.temp.push([timeStr, t]);
-        series.power.push([timeStr, p]);
-      }
-      
-      setTele({
-        gpu: gid,
-        centerTs: now.toISOString(),
-        series
-      });
+      setTele(null);
     }
   };
 
