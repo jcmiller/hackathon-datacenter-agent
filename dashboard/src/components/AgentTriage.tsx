@@ -143,7 +143,7 @@ export function AgentTriage({
           ) : shown.length === 0 ? (
             <>
               <ThinkingDots />
-              <span>connecting to Gemini 2.5 Flash</span>
+              <span>connecting to Gemini Flash</span>
             </>
           ) : (
             <>

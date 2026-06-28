@@ -121,7 +121,7 @@ export function ComputerUsePanel({ onClose }: { onClose: () => void }) {
           <div className="cu-controls">
             {!running && (
               <button className="cu-btn cu-btn-run" onClick={start}>
-                {events.length === 0 ? "▶ Run Demo" : "↺ Restart"}
+                {events.length === 0 ? "▶ ComputerUse" : "↺ ComputerUse"}
               </button>
             )}
             {running && (
@@ -166,7 +166,7 @@ export function ComputerUsePanel({ onClose }: { onClose: () => void }) {
                     <span>Loading dashboard…</span>
                   </>
                 ) : (
-                  <span className="cu-hint">Click "Run Demo" to start</span>
+                  <span className="cu-hint">Click "ComputerUse" to start</span>
                 )}
               </div>
             )}
