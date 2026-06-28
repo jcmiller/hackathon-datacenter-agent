@@ -8,7 +8,7 @@ Hackathon project — 2026 AI Engineer World's Fair. Targeting two tracks:
 
 ## Live demo
 
-**http://134.199.208.214:8000** — publicly accessible, running on DigitalOcean SFO3.
+**[http://134.199.208.214:8000](http://134.199.208.214:8000)** — publicly accessible, running on DigitalOcean SFO3.
 
 Click any incident in the feed → Gemini 2.5 Flash triages it live with real tool calls streaming in real time. Every completed triage writes to the SOP and retrains the predictor — the system gets smarter each run.
 
@@ -67,12 +67,13 @@ After each triage the UI shows:
 ## Quick start (local)
 
 ```bash
-pip install -r requirements.txt
+pip install -e .                        # or: uv sync
 export GOOGLE_API_KEY=...
-uvicorn gpusitter.app.sim:app --reload  # → http://localhost:8000  (or: PYTHONPATH=src uvicorn ...)
-pytest -q                               # offline test suite (no API key needed)```
+PYTHONPATH=src uvicorn gpusitter.app.sim:app --reload  # → http://localhost:8000
+pytest -q                               # offline test suite (no API key needed)
+```
 
-No big data needed locally — the app serves fixture incidents from `backend/dashboard/fixtures/`.
+No big data needed locally — the app serves fixture incidents from `src/gpusitter/app/dashboard/fixtures/`.
 
 ## Status
 
