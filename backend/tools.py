@@ -40,3 +40,29 @@ def record_resolution(incident_type, summary, disposition, resolution):
     append_incident({"type": incident_type, "summary": summary,
                      "disposition": disposition, "resolution": resolution}, SOP_PATH)
     return {"recorded": True}
+
+# --- appended to backend/tools.py ---
+import backend.stream as stream
+import backend.dataset as dataset
+import backend.classifier as classifier
+
+def get_sensory(job_id):
+    """Return telemetry-aggregate fields for a job from accumulated history."""
+    for r in stream.HISTORY:
+        if str(r.get("job_id")) == str(job_id):
+            return {k: r[k] for k in r if k.startswith(("power_", "temp_", "util_"))}
+    return {}
+
+def train_and_validate(model_type, features):
+    """Fit a candidate on jobs-so-far, score val ROC-AUC, promote if it beats the incumbent."""
+    X, y = dataset.build_xy(stream.HISTORY, features)
+    Xtr, ytr, Xval, yval = dataset.time_split(X, y, val_frac=0.3)
+    if len(set(ytr)) < 2 or len(set(yval)) < 2:
+        return {"trained": False, "reason": "insufficient class balance"}
+    est = classifier.fit_candidate(model_type, features, Xtr, ytr)
+    val_auc = classifier.auc(est, Xval, yval)
+    incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
+    promoted = classifier.maybe_promote(est, model_type, features, val_auc)
+    return {"trained": True, "model_type": model_type, "features": features,
+            "val_auc": val_auc, "incumbent_auc": incumbent_auc,
+            "promoted": promoted, "version": classifier.INCUMBENT.version}
