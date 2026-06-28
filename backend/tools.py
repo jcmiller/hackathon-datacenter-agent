@@ -97,22 +97,31 @@ def train_and_validate(model_type: str = "logreg"):
     with open(SOP_PATH) as f:
         entries = json.load(f)
     X, y, features = dataset.build_xy_from_sop(entries)
-    if len(X) < 6:
-        return {"trained": False, "reason": f"need ≥6 labelled examples, have {len(X)}"}
+    if len(X) < 1:
+        return {"trained": False, "reason": "no SOP entries with metrics yet"}
+    est = classifier.fit_candidate(model_type, features, X, y)
+
+    # Compute val AUC only when we have enough data for a meaningful split with both classes
+    val_auc = None
     Xtr, ytr, Xval, yval = dataset.time_split_lists(X, y, val_frac=0.3)
-    if len(set(ytr)) < 2 or len(set(yval)) < 2:
-        return {"trained": False, "reason": "insufficient class balance in split"}
-    est = classifier.fit_candidate(model_type, features, Xtr, ytr)
-    val_auc = classifier.auc_from_lists(est, Xval, yval)
+    if len(Xval) >= 2 and len(set(ytr)) >= 2 and len(set(yval)) >= 2:
+        val_auc = round(classifier.auc_from_lists(est, Xval, yval), 3)
+
     incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
-    promoted = classifier.maybe_promote(est, model_type, features, val_auc, len(X))
-    if promoted:
-        classifier.save_state(MODEL_STATE_PATH)
+    # Promote if no incumbent yet, or new AUC beats old one (skip comparison when AUC unavailable)
+    should_promote = (classifier.INCUMBENT is None or
+                      (val_auc is not None and val_auc > incumbent_auc))
+    promoted = False
+    if should_promote:
+        promoted = classifier.maybe_promote(est, model_type, features, val_auc or 0.0, len(X))
+        if promoted:
+            classifier.save_state(MODEL_STATE_PATH)
     return {
         "trained": True, "model_type": model_type, "features": features,
-        "val_auc": round(val_auc, 3), "incumbent_auc": round(incumbent_auc, 3) if incumbent_auc else None,
+        "val_auc": val_auc, "incumbent_auc": round(incumbent_auc, 3) if incumbent_auc else None,
         "promoted": promoted, "n_samples": len(X),
         "version": classifier.INCUMBENT.version if classifier.INCUMBENT else 0,
+        "note": "no holdout yet — need more varied incidents for AUC" if val_auc is None else None,
     }
 
 

@@ -128,7 +128,7 @@ export function AgentTriage({
           <span className="model-label">predictor</span>
           <span className="model-type">{model.model_type}</span>
           <span className="model-ver">v{model.version}</span>
-          <span className="model-auc">AUC {model.val_auc.toFixed(3)}</span>
+          <span className="model-auc">AUC {model.val_auc != null ? model.val_auc.toFixed(3) : "—"}</span>
           <span className="model-n">{model.n_samples} samples</span>
         </div>
       )}

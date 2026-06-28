@@ -55,7 +55,7 @@ export interface ModelCard {
   version: number;
   model_type: string;
   features: string[];
-  val_auc: number;
+  val_auc: number | null;
   n_samples: number;
 }
 
