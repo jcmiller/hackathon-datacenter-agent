@@ -12,3 +12,8 @@ def test_append_then_search_roundtrip(tmp_path):
     hits = search_incidents("train", p)
     assert len(hits) == 1
     assert hits[0]["resolution"] == "replaced GPU"
+
+def test_append_creates_parent_dir(tmp_path):
+    p = str(tmp_path/"nested"/"sop.json")
+    append_incident({"type":"train","summary":"s","disposition":"d","resolution":"r"}, p)
+    assert search_incidents("train", p)[0]["resolution"] == "r"
