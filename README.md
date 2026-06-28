@@ -101,6 +101,7 @@ From a single screenshot, Gemini 3.5 Flash correctly:
 | `/api/incidents` | GET SSE | Live stream of incidents from AcmeTrace Kalos trace |
 | `/api/triage` | POST SSE | Stream Gemini 2.5 Flash agent events for one incident |
 | `/api/model` | GET | Current predictor: version, model_type, val_auc, n_samples |
+| `/api/monitor` | GET | Per-row risk scores + alert/miss status from the incumbent (i6k); real droplet artifacts win, honest demo fixture fallback. Optional `budget`/`horizon` params |
 | `/api/feedback` | POST | Record outcome `{incident_id, outcome}` → re-embeds SOP entry |
 | `/api/computer-use` | POST SSE | Gemini 3.5 Flash computer use remediation session |
 
