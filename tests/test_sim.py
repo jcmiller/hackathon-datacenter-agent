@@ -6,6 +6,20 @@ from fastapi.testclient import TestClient
 
 client = TestClient(sim.app)
 
+
+def test_record_resolution_emits_pending_update(tmp_path, monkeypatch):
+    import backend.tools as tools_mod
+    sop = tmp_path / "sop.json"
+    monkeypatch.setattr(tools_mod, "SOP_PATH", str(sop))
+    tools_mod._pending_updates.clear()
+
+    tools_mod.record_resolution("GPU_HW_FAULT", "test summary", "PAGE_TECHNICIAN", "replaced card")
+
+    assert len(tools_mod._pending_updates) == 1
+    upd = tools_mod._pending_updates[0]
+    assert upd["path"] == str(sop)
+    assert upd["entry"]["type"] == "GPU_HW_FAULT"
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

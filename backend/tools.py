@@ -10,6 +10,7 @@ POWER_CSV = "data/acme-util/data/utilization/kalos/POWER_USAGE.csv"  # DCGM_FI_D
 TEMP_CSV  = "data/acme-util/data/utilization/kalos/GPU_TEMP.csv"     # DCGM_FI_DEV_GPU_TEMP (C)
 SOP_PATH  = "data/sop.json"
 _TICKET = {"n": 0}
+_pending_updates: list[dict] = []
 
 def get_telemetry(fail_time, window=120):
     """GPU telemetry around an incident, keyed by the real DCGM field names a
@@ -46,8 +47,10 @@ def page_technician(node_info, reason):
 
 def record_resolution(incident_type, summary, disposition, resolution):
     """Append this incident + resolution to the SOP memory."""
-    append_incident({"type": incident_type, "summary": summary,
-                     "disposition": disposition, "resolution": resolution}, SOP_PATH)
+    entry = {"type": incident_type, "summary": summary,
+             "disposition": disposition, "resolution": resolution}
+    append_incident(entry, SOP_PATH)
+    _pending_updates.append({"path": SOP_PATH, "entry": entry})
     return {"recorded": True}
 
 
