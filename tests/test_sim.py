@@ -1,6 +1,7 @@
 """Tests for gpusitter.app.sim — run offline, no API key needed."""
 
 import csv
+import json
 import pathlib
 
 from fastapi.testclient import TestClient
@@ -424,3 +425,161 @@ def test_monitor_returns_scores_and_miss_grid(tmp_path, monkeypatch):
     # The miss detector actually distinguishes: a skilled incumbent at 10% budget
     # catches a non-trivial share of onsets (more than the budget floor).
     assert grid["caught"] > 4, grid
+
+
+# ---------------------------------------------------------------------------
+# /api/incidents, /api/meta, /api/fleet, /api/telemetry — real dashboard data
+# with explicit fixture fallback (bead h7w)
+# ---------------------------------------------------------------------------
+
+
+def _drain_sse():
+    """Drain /api/incidents into (default_frames, named_events).
+
+    ``default_frames`` are the unnamed ``message`` frames the browser
+    ``EventSource.onmessage`` receives — what the current React consumer treats as
+    Incidents. ``named_events`` maps ``event:`` name -> list of decoded payloads
+    (e.g. the provenance event the default handler never sees).
+    """
+    sim._incidents_cache.clear()
+    with client.stream("GET", "/api/incidents") as resp:
+        body = "".join(resp.iter_text())
+    default_frames: list[dict] = []
+    named_events: dict[str, list[dict]] = {}
+    for block in body.split("\n\n"):
+        if not block.strip():
+            continue
+        event_name = None
+        data = None
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event_name = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data = json.loads(line[len("data:") :].strip())
+        if data is None:
+            continue
+        if event_name is None:
+            default_frames.append(data)
+        else:
+            named_events.setdefault(event_name, []).append(data)
+    return default_frames, named_events
+
+
+def test_dashboard_endpoints_serve_real_substrate(monkeypatch):
+    """With the committed real substrate present (the default), /api/meta, /api/fleet
+    and /api/telemetry serve real-derived data badged ``real_substrate`` (AC#2/#3/#4)."""
+    monkeypatch.setattr(sim, "STEP_SECONDS", 0)
+
+    meta = client.get("/api/meta").json()
+    assert meta["dataSource"] == "real_substrate"
+    assert meta["provenance"]["kind"] == "real"
+    assert meta["provenance"]["telemetryKind"] == "real"
+    assert meta["totalGpus"] > 0
+
+    fleet = client.get("/api/fleet").json()
+    assert fleet["dataSource"] == "real_substrate"
+    # fault cells exist and are exactly the hero onset members (latched-state guard).
+    fault = [c for c in fleet["cells"] if c["status"] == "fault"]
+    assert fault and fleet["faulted"] == len(fault)
+
+    # telemetry index, then a real per-GPU window for the first incident.
+    index = client.get("/api/telemetry").json()
+    assert index["dataSource"] == "real_substrate"
+    assert index["incidents"], "the real substrate ships per-incident telemetry"
+    inc_id = index["incidents"][0]
+    tw = client.get("/api/telemetry", params={"incident": inc_id}).json()
+    assert tw["dataSource"] == "real_substrate"
+    assert tw["incident"] == inc_id
+    assert tw["series"]["temp"] and tw["series"]["power"] and tw["series"]["util"]
+
+
+def test_incidents_sse_real_substrate_is_badged(monkeypatch):
+    """Provenance rides a NAMED 'provenance' event (invisible to the default
+    onmessage handler); every default incident frame is tagged ``dataSource`` so a
+    fixture incident can never render as live telemetry (AC#1/#4)."""
+    monkeypatch.setattr(sim, "STEP_SECONDS", 0)
+    incidents, named = _drain_sse()
+    assert "provenance" in named, "provenance must be exposed on a named SSE event"
+    prov = named["provenance"][0]
+    assert prov["dataSource"] == "real_substrate"
+    assert prov["provenance"]["kind"] == "real"
+    assert incidents, "real substrate yields an incident feed"
+    assert all(i["dataSource"] == "real_substrate" for i in incidents)
+    assert all(i["id"].startswith("INC-") for i in incidents)
+
+
+def test_incidents_sse_default_frames_are_all_incidents(tmp_path, monkeypatch):
+    """Backward-compat regression (h7w review): the current React consumer treats
+    EVERY default onmessage frame as an Incident and dereferences ``incident.gpu``.
+    So no non-Incident frame may appear on the default channel — the provenance
+    must NOT leak there. Asserted for both the real and fixture paths."""
+    monkeypatch.setattr(sim, "STEP_SECONDS", 0)
+
+    def _assert_all_incidents(default_frames):
+        assert default_frames, "the feed must still stream incidents"
+        for f in default_frames:
+            # the exact shape the React consumer dereferences without guards.
+            assert f["id"].startswith("INC-"), f
+            assert isinstance(f["gpu"], dict) and "node" in f["gpu"] and "idx" in f["gpu"], f
+            assert "kind" not in f, f"provenance frame leaked onto the default channel: {f}"
+
+    real_default, real_named = _drain_sse()
+    _assert_all_incidents(real_default)
+    assert "provenance" in real_named
+
+    # fixture path: same guarantee (force the real substrate absent).
+    monkeypatch.setattr(sim, "DASHBOARD_SUBSTRATE_DIR", str(tmp_path / "no_substrate"))
+    fx_default, fx_named = _drain_sse()
+    _assert_all_incidents(fx_default)
+    assert "provenance" in fx_named
+
+
+def test_dashboard_endpoints_fall_back_to_badged_fixture(tmp_path, monkeypatch):
+    """When the real substrate is absent, the endpoints fall back to the committed
+    demo fixture — explicitly badged ``fixture`` so it cannot pass as real (AC#5)."""
+    monkeypatch.setattr(sim, "STEP_SECONDS", 0)
+    # Force "no real substrate"; keep the committed legacy fixture dir as fallback.
+    monkeypatch.setattr(sim, "DASHBOARD_SUBSTRATE_DIR", str(tmp_path / "no_substrate"))
+
+    meta = client.get("/api/meta").json()
+    assert meta["dataSource"] == "fixture"
+    assert meta["provenance"]["kind"] == "fixture"
+    assert "NOT" in meta["provenance"]["fixture_note"]
+
+    fleet = client.get("/api/fleet").json()
+    assert fleet["dataSource"] == "fixture"
+    assert fleet["cells"]
+
+    index = client.get("/api/telemetry").json()
+    assert index["dataSource"] == "fixture"
+    inc_id = index["incidents"][0]
+    tw = client.get("/api/telemetry", params={"incident": inc_id}).json()
+    assert tw["dataSource"] == "fixture"
+    assert tw["series"]["temp"]
+
+    incidents, named = _drain_sse()
+    assert named["provenance"][0]["dataSource"] == "fixture"
+    assert incidents and all(i["dataSource"] == "fixture" for i in incidents)
+
+
+def test_dashboard_endpoints_unavailable_when_all_absent(tmp_path, monkeypatch):
+    """No real substrate AND no demo fixture -> honest unavailable, never a crash
+    or mislabeled empty render (AC#5)."""
+    monkeypatch.setattr(sim, "DASHBOARD_SUBSTRATE_DIR", str(tmp_path / "no_substrate"))
+    monkeypatch.setattr(sim, "DASHBOARD_FIXTURE_DIR", str(tmp_path / "no_fixture"))
+
+    for path in ("/api/meta", "/api/fleet", "/api/telemetry"):
+        body = client.get(path).json()
+        assert body["available"] is False, path
+        assert body["dataSource"] == "unavailable", path
+
+
+def test_telemetry_unknown_incident_404(monkeypatch):
+    """An unknown incident id returns 404 with the available ids — never a silently
+    empty chart (AC#5)."""
+    r = client.get("/api/telemetry", params={"incident": "INC-999"})
+    assert r.status_code == 404
+    body = r.json()
+    assert "INC-999" in body["error"]
+    assert body["available"], "404 must list the real incidents that DO exist"
+    assert body["dataSource"] == "real_substrate"

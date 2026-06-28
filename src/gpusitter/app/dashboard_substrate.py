@@ -543,6 +543,44 @@ def assemble_substrate(
     )
 
 
+def substrate_available(substrate_dir: str | Path = SUBSTRATE_DIR) -> bool:
+    """True when a complete committed substrate artifact exists at ``substrate_dir``.
+
+    Requires all four top-level documents; the telemetry directory is optional
+    (an incident-less substrate is still a valid, if empty, real artifact).
+    """
+    d = Path(substrate_dir)
+    return all(
+        (d / n).exists() for n in ("manifest.json", "meta.json", "fleet.json", "incidents.json")
+    )
+
+
+def load_substrate(substrate_dir: str | Path = SUBSTRATE_DIR) -> Substrate:
+    """Read a committed substrate artifact back into a :class:`Substrate`.
+
+    Inverse of :func:`write_substrate`: loads meta/fleet/incidents/manifest plus
+    every ``telemetry/INC-*.json`` window. Pure file IO — no LFS, no droplet, no
+    re-derivation — so the dashboard serves the real artifact off-droplet.
+    """
+    d = Path(substrate_dir)
+
+    def _read(name: str) -> object:
+        return json.loads((d / name).read_text())
+
+    telemetry: dict[str, dict] = {}
+    tel_dir = d / "telemetry"
+    if tel_dir.exists():
+        for f in sorted(tel_dir.glob("INC-*.json")):
+            telemetry[f.stem] = json.loads(f.read_text())
+    return Substrate(
+        meta=_read("meta.json"),
+        fleet=_read("fleet.json"),
+        incidents=_read("incidents.json"),
+        telemetry=telemetry,
+        manifest=_read("manifest.json"),
+    )
+
+
 def _git_rev(repo_dir: str | Path) -> str | None:
     try:
         return subprocess.check_output(

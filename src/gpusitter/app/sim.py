@@ -3,6 +3,7 @@
 import asyncio
 import json
 import threading
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from ..agent.agent import triage_stream
 from ..agent.tools import MODEL_STATE_PATH, SOP_PATH
 from ..detection import classifier
 from . import computer_use as cu
+from . import dashboard_substrate as ds
 
 app = FastAPI()
 
@@ -39,6 +41,19 @@ _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
 _assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
 
+# Dashboard data source selection (bead h7w). The REAL artifact is the committed,
+# real-derived substrate built from edge-detected Kalos Xid onsets (bead t7p); it
+# ships in the package so the dashboard serves real-derived telemetry off-droplet.
+# When that artifact is absent we fall back — explicitly badged — to the
+# hand-derived demo fixtures (bead 69c). Both paths overridable in tests.
+DASHBOARD_SUBSTRATE_DIR = str(ds.SUBSTRATE_DIR)
+DASHBOARD_FIXTURE_DIR = str(_fixtures_dir)
+DASHBOARD_FIXTURE_NOTE = (
+    "Illustrative hand-derived demo fixture (Aug-17 06:00 hero snapshot) — NOT "
+    "live telemetry. Raw Kalos data unchanged. Configure the real substrate to "
+    "serve derived-real onsets."
+)
+
 if _assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
 if _fixtures_dir.exists():
@@ -48,22 +63,110 @@ _incidents_cache: dict[str, list] = {}
 _started = {"done": False}
 
 
-def _get_incidents() -> list[dict]:
-    """Load incidents from fixture JSON (relative path) or trace CSV (absolute/injected path)."""
-    # lazy import: avoids pulling the RCA/job-join stack at module load time
+@dataclass
+class DashboardSource:
+    """A resolved dashboard data source plus its honesty badge (bead h7w).
+
+    ``data_source`` is ``"real_substrate"`` for the committed real-derived artifact
+    or ``"fixture"`` for the demo fallback; ``provenance`` is the manifest (real)
+    or a fixture badge so callers can never mistake illustrative data for live
+    telemetry.
+    """
+
+    meta: dict
+    fleet: dict
+    incidents: list[dict]
+    telemetry: dict[str, dict]
+    data_source: str
+    provenance: dict
+
+
+def _resolve_dashboard_source() -> DashboardSource | None:
+    """Resolve the dashboard data source, real-first, with explicit fixture fallback.
+
+    Precedence (mirrors the jds/aow ``_resolve_monitor_registry`` contract):
+
+    1. **Real substrate wins** — the committed, real-derived artifact (manifest
+       ``kind=real``; edge-detected Xid onsets, bead t7p) at
+       ``DASHBOARD_SUBSTRATE_DIR``. Its manifest becomes the provenance.
+    2. **Explicit demo fixture** — the hand-derived snapshot at
+       ``DASHBOARD_FIXTURE_DIR`` (bead 69c), badged ``fixture`` with a note so it
+       cannot pass as live telemetry.
+    3. **Neither present** — ``None`` (the honest unavailable floor).
+    """
+    if ds.substrate_available(DASHBOARD_SUBSTRATE_DIR):
+        sub = ds.load_substrate(DASHBOARD_SUBSTRATE_DIR)
+        return DashboardSource(
+            meta=sub.meta,
+            fleet=sub.fleet,
+            incidents=sub.incidents,
+            telemetry=sub.telemetry,
+            data_source="real_substrate",
+            provenance=dict(sub.manifest),
+        )
+
+    fx = Path(DASHBOARD_FIXTURE_DIR)
+    if (fx / "incidents.json").exists():
+        return _load_fixture_source(fx)
+    return None
+
+
+def _load_fixture_source(fixture_dir: Path) -> DashboardSource:
+    """Build a :class:`DashboardSource` from the hand-derived demo fixtures (badged)."""
+
+    def _read(name: str, default):
+        p = fixture_dir / name
+        return json.loads(p.read_text()) if p.exists() else default
+
+    meta = _read("meta.json", {})
+    telemetry: dict[str, dict] = {}
+    tel_dir = fixture_dir / "telemetry"
+    if tel_dir.exists():
+        for f in sorted(tel_dir.glob("INC-*.json")):
+            telemetry[f.stem] = json.loads(f.read_text())
+    provenance = {
+        "kind": "fixture",
+        "telemetryKind": "fixture",
+        "source": meta.get("source"),
+        "fixture_note": DASHBOARD_FIXTURE_NOTE,
+    }
+    return DashboardSource(
+        meta=meta,
+        fleet=_read("fleet.json", {}),
+        incidents=_read("incidents.json", []),
+        telemetry=telemetry,
+        data_source="fixture",
+        provenance=provenance,
+    )
+
+
+def _incident_feed() -> tuple[list[dict], str, dict]:
+    """Incidents for the SSE stream + (data_source, provenance), real-first.
+
+    An absolute ``TRACE_CSV`` is treated as an explicit job-trace override (tests
+    / custom traces) and routed to the legacy ``load_incidents`` path so existing
+    behavior is preserved. Otherwise the dashboard substrate resolver decides,
+    preferring real over fixture; only an absent substrate AND absent fixture
+    degrades to the job-trace fallback.
+    """
+    if Path(TRACE_CSV).is_absolute():
+        from ..rca.job_join import load_incidents as _load
+
+        key = str(TRACE_CSV)
+        if key not in _incidents_cache:
+            _incidents_cache[key] = _load(TRACE_CSV)
+        return _incidents_cache[key], "trace", {"kind": "trace", "path": key}
+
+    src = _resolve_dashboard_source()
+    if src is not None:
+        return src.incidents, src.data_source, src.provenance
+
     from ..rca.job_join import load_incidents as _load
 
-    fixtures_path = _DASHBOARD.parent / "fixtures" / "incidents.json"
     key = str(TRACE_CSV)
     if key not in _incidents_cache:
-        # Use fixtures when the path is the default relative path; skip for absolute paths
-        # (e.g. test-injected tmp files) so tests can inject their own CSV.
-        if not Path(TRACE_CSV).is_absolute() and fixtures_path.exists():
-            with open(fixtures_path) as f:
-                _incidents_cache[key] = json.load(f)
-        else:
-            _incidents_cache[key] = _load(TRACE_CSV)
-    return _incidents_cache[key]
+        _incidents_cache[key] = _load(TRACE_CSV)
+    return _incidents_cache[key], "trace", {"kind": "trace", "path": key}
 
 
 @app.get("/")
@@ -78,14 +181,97 @@ def _json(obj):
 
 @app.get("/api/incidents")
 async def incidents(request: Request):
+    """Stream the incident feed as SSE, real-first with explicit fixture badging.
+
+    Backward compatibility (bead h7w review): the provenance is emitted as a NAMED
+    SSE event (``event: provenance``), which the browser ``EventSource.onmessage``
+    handler ignores — only unnamed ``message`` frames reach it. So every default
+    frame the current React consumer sees is a real Incident (it dereferences
+    ``incident.gpu``); a non-Incident frame on the default channel would crash it.
+    Each incident is still tagged ``dataSource`` (a harmless extra field) so a
+    fixture incident can never be rendered as live telemetry. The 8co.31n React
+    rewrite consumes the provenance event via ``addEventListener('provenance')``.
+    """
+    feed, data_source, provenance = _incident_feed()
+    header = {"dataSource": data_source, "provenance": provenance}
+
     async def gen():
-        for inc in _get_incidents():
+        # Named event: invisible to the default onmessage handler, so it cannot
+        # break clients that treat every onmessage frame as an Incident.
+        yield f"event: provenance\ndata: {_json(header)}\n\n"
+        for inc in feed:
             if await request.is_disconnected():
                 break
-            yield f"data: {_json(inc)}\n\n"
+            yield f"data: {_json({**inc, 'dataSource': data_source})}\n\n"
             await asyncio.sleep(STEP_SECONDS)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+def _unavailable(kind: str) -> dict:
+    """Honest unavailable floor when neither real substrate nor fixture exists."""
+    return {
+        "available": False,
+        "dataSource": "unavailable",
+        "reason": f"no real dashboard substrate and no committed demo fixture for {kind}",
+    }
+
+
+@app.get("/api/meta")
+def get_meta():
+    """Dashboard meta (event window, cascade ts, fleet totals) + source provenance."""
+    src = _resolve_dashboard_source()
+    if src is None:
+        return _unavailable("meta")
+    return {**src.meta, "dataSource": src.data_source, "provenance": src.provenance}
+
+
+@app.get("/api/fleet")
+def get_fleet():
+    """Real per-GPU fleet snapshot (heatmap cells) + source provenance.
+
+    Fault cells are edge-detected hero-burst members only; every other GPU's
+    status is derived from utilization, never a latched Xid value (bead t7p).
+    """
+    src = _resolve_dashboard_source()
+    if src is None:
+        return _unavailable("fleet")
+    return {**src.fleet, "dataSource": src.data_source, "provenance": src.provenance}
+
+
+@app.get("/api/telemetry")
+def get_telemetry(incident: str | None = None):
+    """Per-GPU real telemetry window around a selected incident + provenance.
+
+    Without an ``incident`` query param, returns the index of available incident
+    ids. An unknown id returns 404 with the available ids so the caller cannot
+    silently render an empty chart.
+    """
+    src = _resolve_dashboard_source()
+    if src is None:
+        return _unavailable("telemetry")
+    if incident is None:
+        return {
+            "incidents": sorted(src.telemetry),
+            "dataSource": src.data_source,
+            "provenance": src.provenance,
+        }
+    rec = src.telemetry.get(incident)
+    if rec is None:
+        return JSONResponse(
+            {
+                "error": f"no telemetry window for {incident}",
+                "available": sorted(src.telemetry),
+                "dataSource": src.data_source,
+            },
+            status_code=404,
+        )
+    return {
+        **rec,
+        "incident": incident,
+        "dataSource": src.data_source,
+        "provenance": src.provenance,
+    }
 
 
 @app.post("/api/triage")

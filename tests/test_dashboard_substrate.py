@@ -306,6 +306,38 @@ def test_write_substrate_is_deterministic_and_prunes(tmp_path, monkeypatch):
         assert (out / name).exists()
 
 
+def test_load_substrate_round_trips_written_artifact(tmp_path, monkeypatch):
+    # write -> load must reconstruct meta/fleet/incidents/manifest + every
+    # telemetry window, so the backend serves the real artifact off-droplet.
+    sub, _, _ = _assemble(tmp_path, monkeypatch)
+    out = tmp_path / "out"
+    ds.write_substrate(sub, out)
+
+    assert ds.substrate_available(out) is True
+    loaded = ds.load_substrate(out)
+    assert loaded.meta == sub.meta
+    assert loaded.fleet == sub.fleet
+    assert loaded.incidents == sub.incidents
+    # The loaded artifact must equal the on-disk JSON: re-encode the in-memory
+    # manifest the same way (JSON coerces the int Xid-code keys to strings).
+    assert loaded.manifest == json.loads(json.dumps(sub.manifest))
+    assert set(loaded.telemetry) == set(sub.telemetry)
+    for inc_id, rec in sub.telemetry.items():
+        assert loaded.telemetry[inc_id] == json.loads(json.dumps(rec))
+
+
+def test_substrate_available_false_when_incomplete(tmp_path):
+    # A directory missing any of the four top-level documents is NOT available
+    # (so the backend resolver degrades to the fixture/unavailable branch).
+    assert ds.substrate_available(tmp_path) is False
+    (tmp_path / "manifest.json").write_text("{}")
+    (tmp_path / "meta.json").write_text("{}")
+    (tmp_path / "fleet.json").write_text("{}")
+    assert ds.substrate_available(tmp_path) is False  # incidents.json still absent
+    (tmp_path / "incidents.json").write_text("[]")
+    assert ds.substrate_available(tmp_path) is True
+
+
 def test_build_substrate_off_droplet_fails_loud(tmp_path):
     # No data/ tree under repo_dir -> the canonical resolver raises (honest
     # "raw data not materialized" state), never a silent empty substrate.
