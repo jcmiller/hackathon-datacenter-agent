@@ -36,7 +36,7 @@ Because the VM disk size is 120 GB, checking out the entire 76 GB LFS repository
 To avoid this, we cloned the repo skipping the "smudge" phase and downloaded the files directly into the git LFS cache (`.git/lfs/objects/`) using `git lfs fetch`.
 
 ### Method A: Read directly from LFS Cache in Python (Recommended)
-You can read any LFS file directly from the cache without checking it out (which uses 0 bytes of extra disk space). We have provided a helper script `scripts/lfs_helper.py` in the repository containing the `get_lfs_cache_path` function.
+You can read any LFS file directly from the cache without checking it out (which uses 0 bytes of extra disk space). We have provided a helper script `scripts/lfs_helper.py` in the repository containing the `get_lfs_cache_path` and `resolve_data_path` functions.
 
 **Python Example:**
 ```python
@@ -57,6 +57,17 @@ df = pd.read_csv(resolved_path)
 print(df.head())
 ```
 
+The helper also has CLI checks for the common Kalos metrics:
+
+```bash
+cd /root/hackathon-datacenter-agent
+python scripts/lfs_helper.py kalos-status data/acme-util
+python scripts/lfs_helper.py resolve data/acme-util data/utilization/kalos/XID_ERRORS.csv
+```
+
+This works whether the raw CSV is checked out, only a pointer file exists, or
+the working-tree path has been deleted and only the Git LFS cache remains.
+
 ### Method B: Selective Checkout (File-by-File)
 If you need specific files to appear physically in the folder `data/acme-util/data/...`, you can checkout only those files:
 
@@ -65,11 +76,15 @@ cd /root/hackathon-datacenter-agent/data/acme-util
 git lfs pull --include="data/utilization/kalos/GPU_UTIL.csv"
 ```
 
-To clean up checked-out files and free up space again:
+To clean up a checked-out file and free working-tree space again, restore only
+the specific heavy path you checked out:
 ```bash
-git checkout -- .    # revert files back to pointers
-git lfs prune --force # clear cached files no longer referenced by a checkout
+git checkout -- data/utilization/kalos/GPU_UTIL.csv
 ```
+
+Do not run broad cleanup commands inside `data/acme-util` unless you have checked
+`git status --short`; that repository is often intentionally in a cache-only
+state on the droplet.
 
 ---
 
