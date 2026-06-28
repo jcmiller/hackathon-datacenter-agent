@@ -71,7 +71,7 @@ async def incidents(request: Request):
 
 @app.post("/api/triage")
 async def do_triage(incident: dict):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     event_q: asyncio.Queue = asyncio.Queue()
 
     def run():
