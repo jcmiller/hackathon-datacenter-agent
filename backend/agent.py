@@ -29,7 +29,7 @@ Ground every statement in a number a tool returned. Be concise.
 def build_agent():
     return Agent(
         name="oncall_rca",
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash",
         instruction=INSTRUCTION,
         tools=[
             tools.get_telemetry,
