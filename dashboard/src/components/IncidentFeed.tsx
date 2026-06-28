@@ -1,7 +1,11 @@
 import type { Incident } from "../types";
 
-function hhmmss(ts: string) {
-  return ts.slice(11, 19);
+function fmtTs(ts: string) {
+  const d = new Date(ts);
+  const mo = d.toLocaleString("en-US", { month: "short" });
+  const day = d.getDate();
+  const hhmm = d.toTimeString().slice(0, 5);
+  return `${mo} ${day} · ${hhmm}`;
 }
 
 export function IncidentFeed({
@@ -40,7 +44,7 @@ export function IncidentFeed({
               <span>
                 {inc.gpu.node}-{inc.gpu.idx}
               </span>
-              <span className="mono-num">{hhmmss(inc.ts)}</span>
+              <span className="mono-num">{fmtTs(inc.ts)}</span>
               <span className="mono-num">+{inc.correlatedCount} corr</span>
             </div>
           </div>
