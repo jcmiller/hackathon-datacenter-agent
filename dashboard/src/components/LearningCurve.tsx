@@ -95,9 +95,9 @@ export function LearningCurve() {
               />
               <text
                 className="lc-floor-label"
-                x={PAD_L + PLOT_W}
-                y={yPix(0.5) - 6}
-                textAnchor="end"
+                x={PAD_L + 2}
+                y={yPix(0.5) + 14}
+                textAnchor="start"
               >
                 no-skill prior (0.500)
               </text>

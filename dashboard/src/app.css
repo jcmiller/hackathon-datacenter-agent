@@ -75,7 +75,6 @@
 .lc-panel {
   display: flex;
   flex-direction: column;
-  margin-top: 10px;
 }
 .lc-header {
   /* reset native button so it inherits the .panel-title look */
@@ -101,8 +100,11 @@
 }
 .lc-svg {
   display: block;
-  width: 100%;
-  height: auto;
+  /* Fixed pixel height so the chart never grows with screen width and
+     squashes the dashboard above it. width:auto keeps the viewBox aspect. */
+  height: 168px;
+  width: auto;
+  max-width: 100%;
   font-family: var(--mono);
 }
 .lc-grid {
