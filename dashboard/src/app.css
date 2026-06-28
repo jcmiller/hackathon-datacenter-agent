@@ -772,3 +772,4 @@
   font-size: 9px;
   color: var(--fg);
 }
+.si-scope { font-size: 10px; line-height: 1.4; border-left: 2px solid var(--border); padding-left: 8px; }

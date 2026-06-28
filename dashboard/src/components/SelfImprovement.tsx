@@ -56,6 +56,14 @@ export function SelfImprovement() {
         {err && !curve && !monitor && (
           <div className="empty" style={{ color: "var(--crit)" }}>{err}</div>
         )}
+        {/* Honest scope label (bead 31n / 1b4): the incumbent is a per-GPU
+            early-warning scorer applied fleet-wide — NOT a topology/cascade model.
+            Until bead 4sz exposes parameters/contributions, only the feature set
+            (card metadata) is shown, not learned coefficients. */}
+        <div className="si-scope faint">
+          per-GPU early-warning scorer, applied fleet-wide — not a topology/cascade model
+          {monitor?.features?.length ? ` · features: ${monitor.features.join(", ")}` : ""}
+        </div>
         <LearningCurveView curve={curve} />
         <MonitorView monitor={monitor} />
       </div>
