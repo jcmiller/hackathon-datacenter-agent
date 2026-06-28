@@ -44,7 +44,7 @@ def _write_sample_csv(tmp_path: pathlib.Path) -> pathlib.Path:
 def test_index_returns_html():
     r = client.get("/")
     assert r.status_code == 200
-    assert "incident" in r.text.lower()
+    assert "root" in r.text.lower()
 
 
 def test_incidents_sse_streams_fail_row(tmp_path, monkeypatch):
