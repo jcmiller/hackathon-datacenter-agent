@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>GPU On-Call RCA</title>
+<style>
+ body{font:14px system-ui;margin:0;display:grid;grid-template-columns:1fr 1fr;height:100vh}
+ .col{padding:16px;overflow:auto}#feed{border-right:1px solid #ddd}
+ .card{border:1px solid #ddd;border-radius:8px;padding:10px;margin:8px 0;cursor:pointer}
+ .fail{border-left:4px solid #e03}.trace{white-space:pre-wrap;background:#f6f6f6;padding:12px;border-radius:8px}
+ h2{margin:0 0 8px}
+</style>
+<div class="col" id="feed"><h2>Incident feed</h2></div>
+<div class="col"><h2>Agent triage</h2><div id="trace" class="trace">Click an incident…</div></div>
+<script>
+ const feed=document.getElementById('feed'), trace=document.getElementById('trace');
+ new EventSource('/incidents').onmessage=e=>{
+   const inc=JSON.parse(e.data), c=document.createElement('div');
+   c.className='card fail';
+   c.textContent=`${inc.state} · job ${inc.job_id} · ${inc.type} · ${inc.node_num} nodes`;
+   c.onclick=async()=>{ trace.textContent='Agent triaging…';
+     const r=await fetch('/triage',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify(inc)});
+     trace.textContent=(await r.json()).disposition; };
+   feed.prepend(c);
+ };
+</script>
