@@ -8,6 +8,7 @@ export function TopBar({
   setFeedCollapsed,
   triageCollapsed,
   setTriageCollapsed,
+  onComputerUse,
 }: {
   meta: Meta | null;
   incidents: Incident[];
@@ -16,6 +17,7 @@ export function TopBar({
   setFeedCollapsed: (c: boolean) => void;
   triageCollapsed: boolean;
   setTriageCollapsed: (c: boolean) => void;
+  onComputerUse?: () => void;
 }) {
   const active = incidents.filter((i) => i.state === "triaging").length;
   return (
@@ -45,7 +47,7 @@ export function TopBar({
           >
             {feedCollapsed ? "Show Feed" : "Hide Feed"}
           </button>
-          <button 
+          <button
             onClick={() => setTriageCollapsed(!triageCollapsed)}
             style={{
               background: triageCollapsed ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.15)',
@@ -61,6 +63,25 @@ export function TopBar({
           >
             {triageCollapsed ? "Show Triage" : "Hide Triage"}
           </button>
+          {onComputerUse && (
+            <button
+              onClick={onComputerUse}
+              style={{
+                background: 'rgba(16,185,129,0.15)',
+                color: '#6ee7b7',
+                border: '1px solid rgba(16,185,129,0.3)',
+                padding: '4px 12px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                outline: 'none',
+                letterSpacing: '0.02em',
+              }}
+            >
+              🖥 Computer Use
+            </button>
+          )}
         </div>
       </div>
       <div className="kpis">

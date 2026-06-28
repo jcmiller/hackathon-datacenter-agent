@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from ..detection import stream, classifier
 from ..agent.agent import triage_stream
 from ..agent.tools import SOP_PATH, MODEL_STATE_PATH
+from . import computer_use as cu
 
 app = FastAPI()
 
@@ -134,6 +135,18 @@ async def record_feedback(body: dict):
             _save_vectors(vectors)
 
     return {"recorded": True, "incident_id": incident_id, "outcome": outcome}
+
+
+@app.post("/api/computer-use")
+async def computer_use_session(body: dict):
+    """Stream a Gemini 3.5 Flash computer use remediation session as SSE."""
+    task = body.get("task") or None
+
+    async def gen():
+        async for event in cu.run_session(task=task):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
 
 
 # Legacy endpoints for backwards compatibility

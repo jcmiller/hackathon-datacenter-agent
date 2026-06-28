@@ -16,6 +16,7 @@ import { IncidentFeed } from "./components/IncidentFeed";
 import { FleetHeatmap } from "./components/FleetHeatmap";
 import { TelemetryStrip } from "./components/TelemetryStrip";
 import { AgentTriage } from "./components/AgentTriage";
+import { ComputerUsePanel } from "./components/ComputerUse";
 
 export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -28,6 +29,7 @@ export function App() {
   // Collapsible panels state
   const [feedCollapsed, setFeedCollapsed] = useState(false);
   const [triageCollapsed, setTriageCollapsed] = useState(false);
+  const [cuOpen, setCuOpen] = useState(false);
 
   // initial load — load initial topology and agent run definitions
   useEffect(() => {
@@ -150,7 +152,9 @@ export function App() {
         setFeedCollapsed={setFeedCollapsed}
         triageCollapsed={triageCollapsed}
         setTriageCollapsed={setTriageCollapsed}
+        onComputerUse={() => setCuOpen(true)}
       />
+      {cuOpen && <ComputerUsePanel onClose={() => setCuOpen(false)} />}
       <div className="cols" style={gridStyle}>
         {!feedCollapsed && (
           <IncidentFeed

@@ -15,6 +15,7 @@ dependencies = [
     "google-genai==2.10.0",
     "httpx==0.28.1",
     "scikit-learn==1.9.0",
+    "playwright>=1.50.0",
 ]
 
 # uv-native dev group: installed by default on `uv sync` (unlike an optional
