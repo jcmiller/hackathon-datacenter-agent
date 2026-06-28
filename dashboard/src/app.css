@@ -68,10 +68,30 @@
   min-height: 0;
 }
 
-/* ---- learning curve hero band ---- */
+/* ---- learning curve strip (collapsible, sits at the bottom) ---- */
 .lc-panel {
   display: flex;
   flex-direction: column;
+  margin-top: 10px;
+}
+.lc-header {
+  /* reset native button so it inherits the .panel-title look */
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-soft);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.lc-header:hover {
+  color: var(--fg);
+}
+.lc-chevron {
+  display: inline-block;
+  width: 12px;
+  margin-right: 6px;
+  color: var(--fg-faint);
 }
 .lc-chart {
   padding: 8px 12px 0;

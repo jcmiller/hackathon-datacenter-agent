@@ -133,7 +133,6 @@ export function App() {
         onComputerUse={() => setCuOpen(true)}
       />
       {cuOpen && <ComputerUsePanel onClose={() => setCuOpen(false)} />}
-      <LearningCurve />
       <div className="cols" style={gridStyle}>
         {!feedCollapsed && (
           <IncidentFeed
@@ -163,6 +162,7 @@ export function App() {
           />
         )}
       </div>
+      <LearningCurve />
     </div>
   );
 }
