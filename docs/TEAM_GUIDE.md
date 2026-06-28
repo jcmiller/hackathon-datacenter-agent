@@ -86,6 +86,30 @@ Do not run broad cleanup commands inside `data/acme-util` unless you have checke
 `git status --short`; that repository is often intentionally in a cache-only
 state on the droplet.
 
+### Cache-safe early-detection dataset
+
+`scripts/build_early_dataset.py` builds the labeled early-detection dataset
+(one row per `(gpu, t_ref)` prediction point; label = an Xid onset for that GPU
+within the horizon; features = the lookback window *before* `t_ref`). It resolves
+each raw kalos metric through `lfs_helper.resolve_data_path` (materialized file,
+LFS pointer, or a deleted working path recovered from `git show`) and streams the
+wide CSVs without materializing the ~80 GB frame — so it runs even when
+`data/acme-util` is in the cache-only state above.
+
+```bash
+# from the repo root on the droplet
+python scripts/build_early_dataset.py \
+    --repo-dir data/acme-util \
+    --metrics GPU_TEMP POWER_USAGE GPU_UTIL MEMORY_TEMP \
+    --horizons 60 300 600 --lookback 600 \
+    --out data/early_detection.parquet
+```
+
+It writes parquet when `pyarrow` is installed, else a sibling `.csv`. The output
+is the compact, reusable table model experiments should read — never re-scan the
+raw telemetry per experiment. Check raw availability first with
+`python scripts/lfs_helper.py kalos-status data/acme-util`.
+
 ---
 
 ## 4. Querying PAI 2020 Data
