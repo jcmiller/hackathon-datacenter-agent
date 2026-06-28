@@ -51,6 +51,16 @@ export interface Meta {
   source: string;
 }
 
+export type FeedbackOutcome = "confirmed" | "false_alarm" | "uncertain";
+
+export interface ModelCard {
+  version: number;
+  model_type: string;
+  features: string[];
+  val_auc: number;
+  n_samples: number;
+}
+
 // Agent reasoning stream events
 export type AgentEvent =
   | { type: "user"; text: string }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentEvent, Incident } from "../types";
+import type { AgentEvent, FeedbackOutcome, Incident, ModelCard } from "../types";
 
 const DISP_META: Record<string, { label: string; cls: string }> = {
   PAGE_TECHNICIAN:  { label: "Page Technician",   cls: "disp-crit" },
@@ -18,8 +18,18 @@ export function AgentTriage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const [feedback, setFeedback] = useState<FeedbackOutcome | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [model, setModel] = useState<ModelCard | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Fetch model card on mount
+  useEffect(() => {
+    fetch("/api/model").then(r => r.json()).then(d => {
+      if (d.model) setModel(d.model);
+    }).catch(() => {});
+  }, []);
 
   // Elapsed timer while agent is running
   useEffect(() => {
@@ -31,6 +41,8 @@ export function AgentTriage({
   useEffect(() => {
     setShown([]);
     setError(null);
+    setFeedback(null);
+    setFeedbackSent(false);
     abortRef.current?.abort();
     if (!incidentId || !incidentData) return;
 
@@ -73,6 +85,10 @@ export function AgentTriage({
         }
       } finally {
         setLoading(false);
+        // Refresh model card after triage completes (train_and_validate may have promoted)
+        fetch("/api/model").then(r => r.json()).then(d => {
+          if (d.model) setModel(d.model);
+        }).catch(() => {});
       }
     })();
 
@@ -83,11 +99,23 @@ export function AgentTriage({
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight });
   }, [shown]);
 
+  const sendFeedback = async (outcome: FeedbackOutcome) => {
+    if (!incidentId || feedbackSent) return;
+    setFeedback(outcome);
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incident_id: incidentId, outcome }),
+      });
+      setFeedbackSent(true);
+    } catch {}
+  };
+
   const visible = shown.filter((e) => e.type !== "disposition");
   const disposition = shown.find((e) => e.type === "disposition");
   const lastVisible = visible[visible.length - 1];
 
-  // Determine what the agent is currently doing
   const awaitingTool = loading && lastVisible?.type === "tool_call";
   const thinking     = loading && (!lastVisible || lastVisible.type === "observation" || lastVisible.type === "file_update");
   const activeTool   = awaitingTool
@@ -107,7 +135,18 @@ export function AgentTriage({
         </span>
       </div>
 
-      {/* Phase status bar — visible while agent is running */}
+      {/* Model card — always visible when a model exists */}
+      {model && (
+        <div className="model-card">
+          <span className="model-label">predictor</span>
+          <span className="model-type">{model.model_type}</span>
+          <span className="model-ver">v{model.version}</span>
+          <span className="model-auc">AUC {model.val_auc.toFixed(3)}</span>
+          <span className="model-n">{model.n_samples} samples</span>
+        </div>
+      )}
+
+      {/* Phase status bar */}
       {loading && (
         <div className={`triage-status ${awaitingTool ? "status-tool" : "status-think"}`}>
           {awaitingTool ? (
@@ -151,6 +190,23 @@ export function AgentTriage({
                   )}
                 </div>
                 <div className="action">{disposition.action}</div>
+
+                {/* Outcome feedback */}
+                <div className="feedback-row">
+                  {feedbackSent ? (
+                    <span className="feedback-sent">
+                      {feedback === "confirmed" ? "✓ Confirmed" : feedback === "false_alarm" ? "✗ False alarm logged" : "? Noted as uncertain"}
+                      {" "}— outcome saved to memory
+                    </span>
+                  ) : (
+                    <>
+                      <span className="feedback-label">Was this correct?</span>
+                      <button className="fb-btn fb-ok"    onClick={() => sendFeedback("confirmed")}>✓ Confirmed</button>
+                      <button className="fb-btn fb-bad"   onClick={() => sendFeedback("false_alarm")}>✗ False alarm</button>
+                      <button className="fb-btn fb-unsure" onClick={() => sendFeedback("uncertain")}>? Uncertain</button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </>

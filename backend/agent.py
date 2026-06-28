@@ -19,8 +19,11 @@ An incident just fired. Triage it in order:
 5. Decide disposition: escalate_to_ops (shared-cause cluster), page_technician (isolated hw fault),
    or restart_and_watch (healthy telemetry + no history of recurrence).
    Call page_technician if hardware replacement is needed.
-6. Call record_resolution. In the summary, explicitly note any pre-failure degradation signals
-   (spike ratio, temp rise) so future triage can predict similar failures earlier.
+6. Call record_resolution. Pass incident_id, and the exact numeric values from steps 2 and 3:
+   power_spike_ratio, temp_rise_C, correlated_count. These metrics train the predictor.
+   In the summary, note pre-failure degradation signals so future triage can predict failures earlier.
+7. Call train_and_validate (model_type="logreg") to fit the failure-disposition classifier on all
+   accumulated SOP entries. Report the val_auc and whether a new model version was promoted.
 Ground every claim in a tool return value. Note if this failure matches a known pattern.
 
 {DOMAIN_PRIORS}"""
@@ -38,6 +41,7 @@ def _build_agent():
             tools.search_past_incidents,
             tools.page_technician,
             tools.record_resolution,
+            tools.train_and_validate,
         ],
     )
 

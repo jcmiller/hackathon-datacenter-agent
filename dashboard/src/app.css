@@ -375,6 +375,57 @@
   line-height: 1.6;
 }
 
+/* ---- model card ---- */
+.model-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11px;
+  background: rgba(111, 184, 151, 0.05);
+}
+.model-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-faint);
+  font-size: 9px;
+}
+.model-type { color: var(--ok); font-weight: 600; }
+.model-ver  { color: var(--fg-faint); }
+.model-auc  { color: var(--ok); font-weight: 700; margin-left: auto; }
+.model-n    { color: var(--fg-faint); }
+
+/* ---- feedback row ---- */
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+.feedback-label { font-size: 11px; color: var(--fg-faint); }
+.fb-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--fg-dim);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.fb-btn:hover       { border-color: var(--fg-dim); }
+.fb-ok:hover        { border-color: var(--ok);   color: var(--ok); }
+.fb-bad:hover       { border-color: var(--crit); color: var(--crit); }
+.fb-unsure:hover    { border-color: var(--warn); color: var(--warn); }
+.feedback-sent {
+  font-size: 11px;
+  color: var(--ok);
+}
+
 .empty {
   color: var(--fg-faint);
   padding: 24px 12px;

@@ -1,6 +1,7 @@
 import pandas as pd
 
 FAIL_STATES = {"NODE_FAIL", "FAILED"}
+SOP_FEATURES = ["power_spike_ratio", "temp_rise_C", "correlated_count"]
 
 def build_xy(history, features):
     df = pd.DataFrame(history)
@@ -14,3 +15,17 @@ def build_xy(history, features):
 def time_split(X, y, val_frac=0.3):
     k = int(len(y) * (1 - val_frac))
     return X.iloc[:k], y[:k], X.iloc[k:], y[k:]
+
+def build_xy_from_sop(entries):
+    """Extract numeric features from SOP entries for disposition classification."""
+    rows = [e for e in entries if e.get("metrics")]
+    if not rows:
+        return [], [], SOP_FEATURES
+    X = [[e["metrics"].get(f, 0.0) for f in SOP_FEATURES] for e in rows]
+    y = [0 if str(e.get("disposition", "")).lower() in ("restart_and_watch", "restart") else 1
+         for e in rows]
+    return X, y, SOP_FEATURES
+
+def time_split_lists(X, y, val_frac=0.3):
+    k = max(1, int(len(y) * (1 - val_frac)))
+    return X[:k], y[:k], X[k:], y[k:]
