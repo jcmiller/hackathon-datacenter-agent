@@ -78,6 +78,76 @@ export interface ModelResponse {
   message?: string;
 }
 
+// Self-improving predictor learning curve. Mirrors the JSON served by
+// GET /api/learning-curve (a verbatim copy of docs/learning_curve.json).
+export interface LearningCurvePoint {
+  version: string; // "v0".."v3"
+  label: string;
+  model_type: string;
+  n_features: number;
+  roc_auc: number;
+  signal_gap: number;
+  hypothesis: string;
+  reflection: string;
+}
+
+export interface LearningCurveRound {
+  round: number;
+  model_type: string;
+  n_features: number;
+  features?: string[];
+  roc_auc: number;
+  signal_gap: number;
+  leaks: boolean;
+  promoted: boolean;
+  version: number | string | null;
+  hypothesis: string;
+  reflection: string;
+}
+
+export interface LearningCurveData {
+  primary_metric: string;
+  dataset: {
+    source: string;
+    synthetic: boolean;
+    n_rows: number;
+    n_features: number;
+    n_positive: number;
+    base_rate: number;
+  };
+  baseline_v0: {
+    name: string;
+    roc_auc: number;
+    avg_precision: number;
+    base_rate: number;
+    n_train: number;
+    n_test: number;
+  };
+  curve: LearningCurvePoint[];
+  rounds: LearningCurveRound[];
+  n_promotions: number;
+  final_incumbent: {
+    version: number | string;
+    model_type: string;
+    roc_auc: number;
+    n_features: number;
+    features: string[];
+  };
+  honest_note: string;
+  real_data_reference: {
+    source: string;
+    dataset?: Record<string, unknown>;
+    best_real: {
+      model: string;
+      horizon: string;
+      roc_auc: number;
+      permuted_baseline: number;
+    };
+    best_hgb_roc_auc: number;
+    verdict: string;
+  };
+}
+
 // Agent reasoning stream events
 export type AgentEvent =
   | { type: "user"; text: string }

@@ -35,6 +35,10 @@ _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "early_detection"
 MONITOR_FIXTURE_DATA_PATH = str(_FIXTURE_DIR / "features.csv")
 MONITOR_FIXTURE_REGISTRY_PATH = str(_FIXTURE_DIR / "registry")
 
+# Bundled self-improving learning-curve artifact (copied from docs/learning_curve.json);
+# ships with the package so /api/learning-curve serves it off-droplet without path guessing.
+LEARNING_CURVE_FIXTURE = Path(__file__).parent / "fixtures" / "learning_curve.json"
+
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
 _assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
@@ -250,6 +254,18 @@ def get_model():
     if state:
         return _provisional_model_card(state)
     return {"model": None, "message": "not yet trained — need ≥1 incident with metrics"}
+
+
+@app.get("/api/learning-curve")
+def get_learning_curve():
+    """Serve the bundled self-improving classifier learning-curve artifact verbatim."""
+    if not LEARNING_CURVE_FIXTURE.exists():
+        return JSONResponse(
+            {"available": False, "note": "learning curve artifact not bundled"},
+            status_code=404,
+        )
+    with open(LEARNING_CURVE_FIXTURE) as f:
+        return json.load(f)
 
 
 @app.get("/api/monitor")

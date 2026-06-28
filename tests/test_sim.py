@@ -294,6 +294,23 @@ def test_model_monitor_fixture_parity_off_droplet(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /api/learning-curve — self-improving classifier learning curve artifact
+# ---------------------------------------------------------------------------
+
+
+def test_learning_curve_serves_bundled_artifact():
+    r = client.get("/api/learning-curve")
+    assert r.status_code == 200
+    body = r.json()
+    for key in ("curve", "baseline_v0", "real_data_reference", "dataset", "honest_note"):
+        assert key in body
+    assert isinstance(body["curve"], list) and body["curve"]
+    first = body["curve"][0]
+    assert "version" in first
+    assert "roc_auc" in first
+
+
+# ---------------------------------------------------------------------------
 # /api/monitor — operational reactive trigger (bead i6k)
 # ---------------------------------------------------------------------------
 

@@ -68,6 +68,144 @@
   min-height: 0;
 }
 
+/* ---- learning curve hero band ---- */
+.lc-panel {
+  display: flex;
+  flex-direction: column;
+}
+.lc-chart {
+  padding: 8px 12px 0;
+}
+.lc-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--mono);
+}
+.lc-grid {
+  stroke: var(--border-soft);
+  stroke-width: 1;
+}
+.lc-axis {
+  fill: var(--fg-faint);
+  font-size: 11px;
+}
+.lc-floor {
+  stroke: var(--fg-faint);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+.lc-floor-label {
+  fill: var(--fg-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.lc-line {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 2.5;
+}
+.lc-dot {
+  fill: var(--ok);
+  stroke: var(--bg-panel);
+  stroke-width: 2;
+}
+.lc-dot-label {
+  fill: var(--fg-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.lc-dot-auc {
+  fill: var(--ok);
+  font-size: 11px;
+  font-weight: 700;
+}
+.lc-ghost {
+  fill: var(--fg-faint);
+  opacity: 0.4;
+}
+.lc-ghost-label {
+  fill: var(--fg-faint);
+  font-size: 9px;
+  opacity: 0.7;
+}
+.lc-ghost-caption {
+  fill: var(--fg-faint);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.lc-anchor-guide {
+  stroke: var(--info);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
+.lc-anchor {
+  fill: var(--info);
+  stroke: var(--bg-panel);
+  stroke-width: 1.5;
+}
+.lc-anchor-label {
+  fill: var(--info);
+  font-size: 10px;
+  font-weight: 700;
+}
+.lc-anchor-val {
+  fill: var(--info);
+  font-size: 11px;
+  font-weight: 700;
+}
+.lc-anchor-sub {
+  fill: var(--fg-faint);
+  font-size: 9px;
+}
+.lc-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px 12px;
+  flex-wrap: wrap;
+}
+.lc-hypothesis {
+  flex: 1;
+  min-width: 320px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  line-height: 1.5;
+}
+.lc-hyp-tag {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ok);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.lc-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lc-badge {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.lc-badge-anchor {
+  color: var(--info);
+  border-color: rgba(111, 151, 184, 0.4);
+}
+.lc-badge-honest {
+  color: var(--fg-faint);
+}
+
 /* ---- incident feed ---- */
 .inc {
   border: 1px solid var(--border);

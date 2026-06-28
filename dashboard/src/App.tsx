@@ -16,6 +16,7 @@ import { FleetHeatmap } from "./components/FleetHeatmap";
 import { TelemetryStrip } from "./components/TelemetryStrip";
 import { AgentTriage } from "./components/AgentTriage";
 import { ComputerUsePanel } from "./components/ComputerUse";
+import { LearningCurve } from "./components/LearningCurve";
 
 export function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -132,6 +133,7 @@ export function App() {
         onComputerUse={() => setCuOpen(true)}
       />
       {cuOpen && <ComputerUsePanel onClose={() => setCuOpen(false)} />}
+      <LearningCurve />
       <div className="cols" style={gridStyle}>
         {!feedCollapsed && (
           <IncidentFeed
