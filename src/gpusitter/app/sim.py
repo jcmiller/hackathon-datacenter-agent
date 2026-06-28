@@ -28,6 +28,13 @@ STEP_SECONDS = 3
 MONITOR_DATA_PATH = "data/early_detection.parquet"
 MONITOR_REGISTRY_PATH = "models/early_detection"
 
+# Committed honest demo fixture (bead jds): a portable fallback so /api/monitor
+# renders off the droplet, when the real artifacts above are absent. Built by
+# gpusitter.app.monitor_fixture; paths anchored to the same tracked on-disk dir.
+_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "early_detection"
+MONITOR_FIXTURE_DATA_PATH = str(_FIXTURE_DIR / "features.csv")
+MONITOR_FIXTURE_REGISTRY_PATH = str(_FIXTURE_DIR / "registry")
+
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
 _assets_dir = _DASHBOARD.parent / "assets"
 _fixtures_dir = _DASHBOARD.parent / "fixtures"
@@ -131,8 +138,14 @@ def get_monitor(budget: float | None = None, horizon: float | None = None):
     Scores the labeled per-GPU feature table (the lys/r7j substrate) with the usable
     pickled incumbent, derives alert-budget thresholds, and runs the horizon-grid
     miss detector. Exposes the per-row risk timeline, alert flags, and per-horizon
-    recall (caught onsets / total) to the dashboard. Degrades honestly when the
-    dataset or a persisted incumbent is absent.
+    recall (caught onsets / total) to the dashboard.
+
+    Artifact resolution (bead jds): the REAL droplet artifacts win
+    (``MONITOR_DATA_PATH`` + a persisted incumbent at ``MONITOR_REGISTRY_PATH``,
+    ``fixture:false``). When they are absent — e.g. off the droplet, without the
+    ~80 GB trace — it falls back to the committed honest demo fixture
+    (``fixture:true`` + a ``fixture_note`` labeling it illustrative). It degrades to
+    ``available:false`` only when even the committed fixture is gone.
 
     Optional ``budget`` / ``horizon`` query params narrow the budget/horizon grid.
     """
@@ -141,20 +154,41 @@ def get_monitor(budget: float | None = None, horizon: float | None = None):
     from ..detection import monitor
     from ..detection.harness import ModelRegistry, load_dataset
 
+    df = None
+    scorer = None
+    is_fixture = False
+    fixture_note = None
+
     registry = ModelRegistry(MONITOR_REGISTRY_PATH)
-    if registry.incumbent is None:
-        return {"available": False, "reason": "no persisted incumbent in registry"}
-    if not os.path.exists(MONITOR_DATA_PATH):
+    if registry.incumbent is not None and os.path.exists(MONITOR_DATA_PATH):
+        df = load_dataset(MONITOR_DATA_PATH)
+        scorer = monitor.RowScorer.from_registry(registry)
+    elif os.path.exists(MONITOR_FIXTURE_DATA_PATH):
+        # Committed honest demo fixture: portable render without the droplet.
+        from .monitor_fixture import FIXTURE_NOTE, load_fixture_registry
+
+        fixture_reg = load_fixture_registry(
+            MONITOR_FIXTURE_DATA_PATH, MONITOR_FIXTURE_REGISTRY_PATH
+        )
+        df = load_dataset(MONITOR_FIXTURE_DATA_PATH)
+        scorer = monitor.RowScorer.from_registry(fixture_reg)
+        is_fixture = True
+        fixture_note = FIXTURE_NOTE
+
+    if scorer is None:
         return {
             "available": False,
-            "reason": f"feature table not found at {MONITOR_DATA_PATH}",
+            "reason": "no monitor data/registry and no committed demo fixture",
             "incumbent": registry.describe_incumbent(),
         }
-    df = load_dataset(MONITOR_DATA_PATH)
-    scorer = monitor.RowScorer.from_registry(registry)
+
     budgets = (budget,) if budget else monitor.DEFAULT_BUDGETS
     horizons = (horizon,) if horizon else monitor.DEFAULT_HORIZONS_S
-    return monitor.monitor_report(df, scorer, budgets=budgets, horizons_s=horizons)
+    report = monitor.monitor_report(df, scorer, budgets=budgets, horizons_s=horizons)
+    report["fixture"] = is_fixture
+    if is_fixture:
+        report["fixture_note"] = fixture_note
+    return report
 
 
 @app.post("/api/feedback")
