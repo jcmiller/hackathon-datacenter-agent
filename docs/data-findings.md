@@ -18,7 +18,7 @@ Source: droplet exploration, embead bead `vf8`.
   per burst in the current characterization), while Aug-29 is mostly cumulative
   fault state.
 - **Xid 43** (channel exception / GPU reset) dominant, then `31` (mem page fault), `94` (contained ECC), `45` (preemptive cleanup).
-- **891 / 2,344 GPUs (~38%)** hit an Xid over the window.
+- **851 distinct GPUs / 852 true Xid *onsets*** over Aug 15–31 (~36% of kalos GPUs); **Xid 43 = 93%** (then 31, 94). Onsets = transitions-into-fault, not latched cells. Canonical: `docs/xid-characterization.md` (`eku`).
 - **Job states (`trace_kalos`):** COMPLETED 47,311 / **FAILED 13,836 (~22%)** / CANCELLED 1,263 / RUNNING 3.
 
 ## Caveats
