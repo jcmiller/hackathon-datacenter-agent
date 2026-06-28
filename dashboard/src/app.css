@@ -210,6 +210,50 @@
 }
 
 /* ---- agent triage ---- */
+
+/* phase status bar */
+.triage-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background 0.3s;
+}
+.triage-status.status-think {
+  background: rgba(111, 151, 184, 0.06);
+  color: var(--info);
+}
+.triage-status.status-tool {
+  background: rgba(217, 119, 87, 0.08);
+  color: var(--accent);
+}
+.triage-status strong { color: inherit; }
+
+/* spinning tool indicator */
+@keyframes spinCW {
+  to { transform: rotate(360deg); }
+}
+.spin {
+  display: inline-block;
+  animation: spinCW 0.9s linear infinite;
+}
+
+/* three-dot thinking animation */
+@keyframes dotBounce {
+  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+  30%           { opacity: 1;    transform: translateY(-3px); }
+}
+.thinking-dots span {
+  display: inline-block;
+  animation: dotBounce 1.2s ease-in-out infinite;
+  font-size: 16px;
+  line-height: 1;
+}
+.thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 .triage-body {
   display: flex;
   flex-direction: column;
@@ -222,7 +266,7 @@
   flex: 1;
 }
 .ev {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .ev .role {
   font-size: 10px;
@@ -230,29 +274,80 @@
   text-transform: uppercase;
   color: var(--fg-faint);
 }
+
+/* tool call rows */
 .ev.tool .line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   color: var(--accent);
 }
+.ev.tool.in-flight .line {
+  color: var(--warn);
+}
+.ev.tool.in-flight {
+  background: rgba(217, 164, 65, 0.05);
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.tool-arrow { font-size: 11px; flex-shrink: 0; }
+.tool-name  { font-weight: 600; }
+.tool-args  { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+/* observation rows */
 .ev.obs .line {
   color: var(--fg-dim);
   border-left: 2px solid var(--border);
   padding-left: 8px;
 }
-.ev.user .line {
-  color: var(--fg);
+.ev.user .line { color: var(--fg); }
+
+/* file_update rows */
+.ev.file {
+  border-left: 2px solid var(--warn);
+  padding-left: 8px;
+  background: rgba(217, 164, 65, 0.04);
+  border-radius: 0 3px 3px 0;
 }
-.ev.file { border-left: 2px solid var(--warn); }
+.ev.file .line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-icon  { color: var(--warn); }
+.file-path  { color: var(--fg-dim); font-size: 11px; }
+.file-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(217, 164, 65, 0.15);
+  color: var(--warn);
+  letter-spacing: 0.06em;
+}
 .ev.file .file-entry {
   margin: 4px 0 0 0;
   font-size: 10px;
-  color: var(--dim);
+  color: var(--fg-faint);
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* disposition banner */
 .disp {
   border-top: 1px solid var(--border);
   padding: 12px;
   background: var(--bg-elev);
+  border-left: 3px solid var(--accent);
+}
+.disp-crit { border-left-color: var(--crit); }
+.disp-warn { border-left-color: var(--warn); }
+.disp-ok   { border-left-color: var(--ok);   }
+
+.disp-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 .disp .tag {
   display: inline-block;
@@ -265,14 +360,19 @@
   border-radius: 3px;
   font-weight: 700;
 }
-.disp .action {
-  margin-top: 8px;
-  color: var(--fg);
-}
+.disp-crit .tag { background: var(--crit); }
+.disp-warn .tag { background: var(--warn); color: var(--bg); }
+.disp-ok   .tag { background: var(--ok);   color: var(--bg); }
+
 .disp .ticket {
-  margin-top: 6px;
   color: var(--ok);
   font-size: 12px;
+  font-weight: 600;
+}
+.disp .action {
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .empty {

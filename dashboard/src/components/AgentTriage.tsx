@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentEvent, Incident } from "../types";
 
+const DISP_META: Record<string, { label: string; cls: string }> = {
+  PAGE_TECHNICIAN:  { label: "Page Technician",   cls: "disp-crit" },
+  ESCALATE_TO_OPS:  { label: "Escalate to Ops",   cls: "disp-warn" },
+  RESTART_AND_WATCH:{ label: "Restart & Watch",   cls: "disp-ok"   },
+};
+
 export function AgentTriage({
   incidentId,
   incidentData,
@@ -11,8 +17,16 @@ export function AgentTriage({
   const [shown, setShown] = useState<AgentEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Elapsed timer while agent is running
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return; }
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [loading]);
 
   useEffect(() => {
     setShown([]);
@@ -69,40 +83,74 @@ export function AgentTriage({
     streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight });
   }, [shown]);
 
+  const visible = shown.filter((e) => e.type !== "disposition");
   const disposition = shown.find((e) => e.type === "disposition");
+  const lastVisible = visible[visible.length - 1];
+
+  // Determine what the agent is currently doing
+  const awaitingTool = loading && lastVisible?.type === "tool_call";
+  const thinking     = loading && (!lastVisible || lastVisible.type === "observation" || lastVisible.type === "file_update");
+  const activeTool   = awaitingTool
+    ? (lastVisible as Extract<AgentEvent, { type: "tool_call" }>).tool
+    : null;
+
+  const dispMeta = disposition?.type === "disposition"
+    ? (DISP_META[disposition.disposition] ?? { label: disposition.disposition.replace(/_/g, " "), cls: "disp-ok" })
+    : null;
 
   return (
     <section className="col panel">
       <div className="panel-title">
         <span>Agent triage · ReAct</span>
-        {incidentId && <span className="faint">{incidentId}</span>}
+        <span className="faint">
+          {loading ? `${elapsed}s` : incidentId ?? ""}
+        </span>
       </div>
+
+      {/* Phase status bar — visible while agent is running */}
+      {loading && (
+        <div className={`triage-status ${awaitingTool ? "status-tool" : "status-think"}`}>
+          {awaitingTool ? (
+            <>
+              <span className="spin">⟳</span>
+              <span>running <strong>{activeTool}</strong></span>
+            </>
+          ) : thinking && shown.length === 0 ? (
+            <>
+              <ThinkingDots />
+              <span>connecting to Gemini 2.5 Flash</span>
+            </>
+          ) : (
+            <>
+              <ThinkingDots />
+              <span>Gemini is reasoning</span>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="triage-body">
         {!incidentId ? (
           <div className="empty">select an incident — the agent will triage it live</div>
         ) : (
           <>
             <div className="stream" ref={streamRef}>
-              {loading && shown.length === 0 && (
-                <div className="empty">Activating Google ADK RCA Agent...</div>
-              )}
               {error && (
                 <div className="empty" style={{ color: "var(--crit)" }}>{error}</div>
               )}
-              {shown
-                .filter((e) => e.type !== "disposition")
-                .map((ev, i) => (
-                  <EventLine key={i} ev={ev} />
-                ))}
-              {loading && <div className="dim cursor" />}
+              {visible.map((ev, i) => (
+                <EventLine key={i} ev={ev} inFlight={i === visible.length - 1 && awaitingTool} />
+              ))}
             </div>
-            {disposition && disposition.type === "disposition" && (
-              <div className="disp fade-up">
-                <span className="tag">{disposition.disposition.replace(/_/g, " ")}</span>
+            {disposition && dispMeta && disposition.type === "disposition" && (
+              <div className={`disp fade-up ${dispMeta.cls}`}>
+                <div className="disp-header">
+                  <span className="tag">{dispMeta.label}</span>
+                  {disposition.ticket && (
+                    <span className="ticket">▸ {disposition.ticket}</span>
+                  )}
+                </div>
                 <div className="action">{disposition.action}</div>
-                {disposition.ticket && (
-                  <div className="ticket">▸ ticket {disposition.ticket} opened</div>
-                )}
               </div>
             )}
           </>
@@ -112,13 +160,22 @@ export function AgentTriage({
   );
 }
 
-function EventLine({ ev }: { ev: AgentEvent }) {
+function ThinkingDots() {
+  return (
+    <span className="thinking-dots">
+      <span>·</span><span>·</span><span>·</span>
+    </span>
+  );
+}
+
+function EventLine({ ev, inFlight }: { ev: AgentEvent; inFlight?: boolean }) {
   if (ev.type === "tool_call")
     return (
-      <div className="ev tool fade-up">
+      <div className={`ev tool fade-up${inFlight ? " in-flight" : ""}`}>
         <div className="line">
-          ▶ {ev.tool}
-          <span className="faint">({ev.args})</span>
+          <span className="tool-arrow">{inFlight ? "⟳" : "✓"}</span>
+          <span className="tool-name">{ev.tool}</span>
+          <span className="faint tool-args">({ev.args})</span>
         </div>
       </div>
     );
@@ -132,7 +189,9 @@ function EventLine({ ev }: { ev: AgentEvent }) {
     return (
       <div className="ev file fade-up">
         <div className="line">
-          ✎ <span className="faint">{ev.path}</span>
+          <span className="file-icon">✎</span>
+          <span className="file-path">{ev.path}</span>
+          <span className="file-badge">sop written</span>
         </div>
         <pre className="file-entry">{JSON.stringify(ev.entry, null, 2)}</pre>
       </div>
