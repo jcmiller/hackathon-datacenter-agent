@@ -6,12 +6,24 @@ from fastapi.responses import FileResponse, StreamingResponse
 from backend.loader import load_incidents
 from backend.agent import triage  # noqa: F401 — re-exported so tests can monkeypatch
 
+from fastapi.staticfiles import StaticFiles
+
 app = FastAPI()
 
 TRACE_CSV = "data/trace_kalos.csv"
 STEP_SECONDS = 3
 
 _DASHBOARD = Path(__file__).parent / "dashboard" / "index.html"
+
+# Mount static assets if build exists
+_assets_dir = _DASHBOARD.parent / "assets"
+if _assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+# Mount fixtures if build exists
+_fixtures_dir = _DASHBOARD.parent / "fixtures"
+if _fixtures_dir.exists():
+    app.mount("/fixtures", StaticFiles(directory=str(_fixtures_dir)), name="fixtures")
 
 # Simple cache: maps csv_path -> list[dict]. Cleared by tests via sim._incidents_cache.clear().
 _incidents_cache: dict[str, list] = {}

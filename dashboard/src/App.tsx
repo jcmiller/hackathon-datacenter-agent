@@ -27,6 +27,10 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tele, setTele] = useState<TelemetryWindow | null>(null);
 
+  // Collapsible panels state
+  const [feedCollapsed, setFeedCollapsed] = useState(false);
+  const [triageCollapsed, setTriageCollapsed] = useState(false);
+
   // initial load — default-select the hero (cascade) incident
   useEffect(() => {
     Promise.all([loadIncidents(), loadFleet(), loadMeta(), loadAgentRuns()])
@@ -60,15 +64,30 @@ export function App() {
     if (match) setSelectedId(match.id);
   };
 
+  // Calculate dynamic grid template columns based on collapsed states
+  const gridStyle = {
+    gridTemplateColumns: `${feedCollapsed ? "" : "300px "}1fr${triageCollapsed ? "" : " 420px"}`,
+  };
+
   return (
     <div className="app">
-      <TopBar meta={meta} incidents={incidents} fleet={fleet} />
-      <div className="cols">
-        <IncidentFeed
-          incidents={incidents}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
+      <TopBar
+        meta={meta}
+        incidents={incidents}
+        fleet={fleet}
+        feedCollapsed={feedCollapsed}
+        setFeedCollapsed={setFeedCollapsed}
+        triageCollapsed={triageCollapsed}
+        setTriageCollapsed={setTriageCollapsed}
+      />
+      <div className="cols" style={gridStyle}>
+        {!feedCollapsed && (
+          <IncidentFeed
+            incidents={incidents}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        )}
         <div className="center">
           <FleetHeatmap
             fleet={fleet}
@@ -77,10 +96,12 @@ export function App() {
           />
           <TelemetryStrip tele={tele} />
         </div>
-        <AgentTriage
-          incidentId={selectedId}
-          events={selectedId ? runs[selectedId] ?? null : null}
-        />
+        {!triageCollapsed && (
+          <AgentTriage
+            incidentId={selectedId}
+            events={selectedId ? runs[selectedId] ?? null : null}
+          />
+        )}
       </div>
     </div>
   );
