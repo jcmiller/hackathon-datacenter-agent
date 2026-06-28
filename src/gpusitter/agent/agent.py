@@ -25,11 +25,13 @@ An incident just fired. Triage it in order:
 7. Call train_and_validate (model_type="logreg") to fit the failure-disposition classifier on all
    accumulated SOP entries. Report the val_auc and whether a new model version was promoted.
 Ground every claim in a tool return value. Note if this failure matches a known pattern.
+Infer the likely fault class from priors + telemetry pattern — never assert a specific Xid
+code as an observed fact unless a tool actually returned it.
 
 {DOMAIN_PRIORS}"""
 
 
-def _build_agent():
+def build_agent():
     return Agent(
         name="oncall_rca",
         model="gemini-2.5-flash",
@@ -41,6 +43,7 @@ def _build_agent():
             tools.search_past_incidents,
             tools.page_technician,
             tools.record_resolution,
+            tools.get_sensory,
             tools.train_and_validate,
         ],
     )
@@ -48,7 +51,7 @@ def _build_agent():
 
 def triage_stream(incident: dict) -> Generator[dict, None, None]:
     """Yield agent events as the ADK runner fires them. Runs synchronously."""
-    runner = InMemoryRunner(agent=_build_agent(), app_name="rca")
+    runner = InMemoryRunner(agent=build_agent(), app_name="rca")
     session = runner.session_service.create_session_sync(app_name="rca", user_id="demo")
     msg = types.Content(
         role="user",

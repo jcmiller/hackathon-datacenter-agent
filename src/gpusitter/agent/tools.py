@@ -196,10 +196,45 @@ def record_resolution(incident_type, summary, disposition, resolution,
     return {"recorded": True}
 
 
-def train_and_validate(model_type: str = "logreg"):
-    """Fit a disposition classifier on all SOP entries that have telemetry metrics.
-    Features: power_spike_ratio, temp_rise_C, correlated_count → label: page/escalate vs restart.
-    Promotes if val ROC-AUC beats the incumbent. Returns the current model card."""
+def _train_over_history(model_type, features):
+    """Fit a failure predictor over the streamed job HISTORY on ``features``.
+
+    Restored original contract (pre-RSI-merge): a feature name absent from the
+    streamed records yields an ``unknown feature`` result rather than a stack
+    trace; a single-class train/val split is guarded; promotion is gated on the
+    incumbent val ROC-AUC."""
+    try:
+        X, y = dataset.build_xy(stream.HISTORY, features)
+    except KeyError:
+        return {"trained": False, "reason": "unknown feature"}
+    Xtr, ytr, Xval, yval = dataset.time_split(X, y, val_frac=0.3)
+    if len(set(ytr)) < 2 or len(set(yval)) < 2:
+        return {"trained": False, "reason": "insufficient class balance"}
+    est = classifier.fit_candidate(model_type, features, Xtr, ytr)
+    val_auc = classifier.auc(est, Xval, yval)
+    incumbent_auc = classifier.INCUMBENT.auc if classifier.INCUMBENT else None
+    promoted = classifier.maybe_promote(est, model_type, features, val_auc)
+    return {"trained": True, "model_type": model_type, "features": features,
+            "val_auc": val_auc, "incumbent_auc": incumbent_auc,
+            "promoted": promoted, "version": classifier.INCUMBENT.version}
+
+
+def train_and_validate(model_type: str = "logreg", features=None):
+    """Fit a failure/disposition classifier and promote it if it beats the incumbent.
+
+    Two data sources, selected by ``features``:
+
+    - ``features=None`` (default — the live triage agent's path): fit a *disposition*
+      classifier on accumulated SOP entries that carry telemetry metrics
+      (power_spike_ratio, temp_rise_C, correlated_count → page/escalate vs restart).
+    - ``features=[...]`` (early-detection / online-learning path): fit a *failure*
+      predictor over the streamed job HISTORY using the named feature columns
+      (label = job state in {NODE_FAIL, FAILED}). An absent column returns
+      ``{"trained": False, "reason": "unknown feature"}``.
+
+    Both promote when val ROC-AUC beats the incumbent and return the model card."""
+    if features is not None:
+        return _train_over_history(model_type, features)
     import json
     if not os.path.exists(SOP_PATH):
         return {"trained": False, "reason": "no SOP entries yet"}
