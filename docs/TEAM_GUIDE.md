@@ -124,7 +124,7 @@ memory); the output rows are identical to a single-load build.
 same-GPU pre-event points. Pass canonical `node#idx` ids of non-onset GPUs to add
 time-matched cluster controls (a negative for each control at every positive
 `t_ref`) for a production-style imbalanced dataset. Evaluate with
-`scripts/eval_early_dataset.py` (time-ordered, GPU-grouped split; ROC-AUC, AP,
+`scripts/eval_early_dataset.py` (strict time-ordered split; ROC-AUC, AP,
 alert-budget, and a permuted no-signal baseline).
 
 ---
