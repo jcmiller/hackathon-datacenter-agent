@@ -119,6 +119,12 @@
   fill: var(--fg-faint);
   font-size: 11px;
 }
+.lc-axis-title {
+  fill: var(--fg-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .lc-floor {
   stroke: var(--fg-faint);
   stroke-width: 1.5;

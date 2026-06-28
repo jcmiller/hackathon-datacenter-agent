@@ -8,7 +8,7 @@ import type { LearningCurveData } from "../types";
 
 const W = 960;
 const H = 160;
-const PAD_L = 52;
+const PAD_L = 74;
 const PAD_R = 150;
 const PAD_T = 18;
 const PAD_B = 30;
@@ -83,6 +83,17 @@ export function LearningCurve() {
                   </text>
                 </g>
               ))}
+
+              {/* y-axis title — what the numbers mean */}
+              <text
+                className="lc-axis-title"
+                x={16}
+                y={PAD_T + PLOT_H / 2}
+                textAnchor="middle"
+                transform={`rotate(-90 16 ${PAD_T + PLOT_H / 2})`}
+              >
+                held-out ROC-AUC
+              </text>
 
               {/* no-skill baseline floor — the OFF/ON contrast. Label parked at the
                   RIGHT end of the line so it never collides with the v0 cluster. */}
@@ -173,7 +184,7 @@ export function LearningCurve() {
                 d={`M${anchorX},${anchorY - 6} L${anchorX + 6},${anchorY} L${anchorX},${anchorY + 6} L${anchorX - 6},${anchorY} Z`}
               />
               <text className="lc-anchor-label" x={anchorX + 12} y={anchorY - 4}>
-                real Kalos
+                Real Cluster Logs
               </text>
               <text className="lc-anchor-val" x={anchorX + 12} y={anchorY + 9}>
                 {anchorVal.toFixed(3)}
@@ -190,7 +201,7 @@ export function LearningCurve() {
               {v3.hypothesis}
             </div>
             <div className="lc-badges">
-              <span className="lc-badge lc-badge-anchor">same loop · real Kalos · leakage-free</span>
+              <span className="lc-badge lc-badge-anchor">same loop · Real Cluster Logs (AcmeTrace paper) · leakage-free</span>
               <span className="lc-badge lc-badge-honest">synthetic demo data · real fits &amp; held-out ROC-AUC</span>
             </div>
           </div>
